@@ -1,0 +1,20 @@
+{
+  "at": "2026-09-17T18:47:54.531Z",
+  "scriptsLoaded": 11,
+  "cues": 131,
+  "plates": 131,
+  "coverage": true,
+  "audioEnd": 211.984,
+  "lastCue": 211.984,
+  "onsets": 615,
+  "selfTest": {
+    "ok": true,
+    "fails": [],
+    "worstTimeDeltaMs": 0
+  },
+  "sweepFrames": 2120,
+  "drawCalls": 6867844,
+  "distinctPlatesSeen": 130,
+  "problems": 0,
+  "warnings": 0
+}

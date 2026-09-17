@@ -1,0 +1,15 @@
+# nothing here is build output — the project has no build step.
+# these are only produced while verifying, and are safe to regenerate.
+_tools/preview/
+_tools/shots/
+_tools/final/
+_tools/review/
+_tools/shot*/
+*.bak
+*.orig
+*.tmp
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store

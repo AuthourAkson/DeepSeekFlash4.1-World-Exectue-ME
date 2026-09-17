@@ -36,33 +36,6 @@ body{
   text-rendering:geometricPrecision;
 }
 
-/* ambient aurora behind the shell — very slow, pure CSS, never fights the film */
-#aurora{
-  position:fixed;inset:-20%;
-  background:
-    radial-gradient(38% 28% at 22% 18%, rgba(var(--accent-rgb),.10), transparent 70%),
-    radial-gradient(30% 24% at 82% 12%, rgba(var(--love-rgb),.08), transparent 70%),
-    radial-gradient(44% 36% at 55% 100%, rgba(var(--hot-rgb),.07), transparent 70%);
-  filter:blur(38px);
-  opacity:.8;
-  pointer-events:none;
-  transition:background 1.2s linear;
-  animation:aurora 24s ease-in-out infinite alternate;
-}
-@keyframes aurora{
-  0%{transform:translate3d(0,0,0) scale(1)}
-  50%{transform:translate3d(2%,1.4%,0) scale(1.06)}
-  100%{transform:translate3d(-1.6%,-1%,0) scale(1.03)}
-}
-
-#shell{
-  position:fixed;inset:0;display:block;
-  background:
-    linear-gradient(180deg, rgba(5,9,14,.55) 0%, rgba(3,6,9,.72) 46%, rgba(1,2,3,.88) 100%);
-}
-body.fs #shell{background:#000}
-body.fs #aurora{opacity:0}
-
 /* canvas --------------------------------------------------------------- */
 #stage{position:absolute;inset:0;overflow:hidden}
 #view{
@@ -148,7 +121,8 @@ kbd{
   border-radius:5px;padding:2px 6px;box-shadow:0 2px 0 var(--line-soft);
 }
 #shell.begun #start-hint{opacity:0;transform:translate(-50%,-50%) scale(1.08);pointer-events:none}
-#shell.begun #start-hint .start-btn{pointer-events:none}
+#shell.begun #start-hint .start-btn{pointer-events:none;animation:none}
+#shell.begun #start-hint .ring{animation:none}
 
 /* top bar -------------------------------------------------------------- */
 #hud-top{
@@ -362,7 +336,6 @@ body.hide-ui{cursor:none}
   #lyric-line{font-size:clamp(15px,2.4vw,22px)}
 }
 @media (prefers-reduced-motion:reduce){
-  #aurora{animation:none}
   #start-hint .start-btn{animation:none}
   #start-hint .ring{animation:none}
   #lyric-line.typing::after{animation:none}

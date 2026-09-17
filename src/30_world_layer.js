@@ -18,6 +18,64 @@
 
   function frame(w, h, u, cx, cy) { W = w; H = h; U = u; CX = cx; CY = cy; }
 
+  /* --------------------------------------------------------------------------
+     ATMOSPHERE. Two layers that give the void depth: slow volumetric light
+     shafts falling from above the frame, and a faint breathing starfield.
+     Both are pure functions of t and intentionally quiet — they exist to make
+     the dark passages feel like a place, not a void.
+     ------------------------------------------------------------------------ */
+  function lightShafts(w, pal, t) {
+    if (!EM.Polish.shafts) return;
+    var c = D.ctx();
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    var fx = Math.sin(t * 0.047) * W * 0.10;
+    var fy = -H * 0.42 + Math.cos(t * 0.063) * H * 0.05;
+    var rays = 7;
+    var base = 0.030 + 0.045 * w.love + 0.020 * w.heat;
+    for (var i = 0; i < rays; i++) {
+      var seed = hash(i * 977 + 41);
+      var ang = -Math.PI / 2 + (i - (rays - 1) / 2) * 0.34 + Math.sin(t * 0.052 + i * 1.7) * 0.075;
+      var len = H * (0.95 + seed * 0.5);
+      var ex = fx + Math.cos(ang) * len;
+      var ey = fy + Math.sin(ang) * len;
+      var spread = (26 + seed * 48) * U;
+      var nx = -Math.sin(ang), ny = Math.cos(ang);
+      var g = c.createLinearGradient(fx, fy, ex, ey);
+      var col = i % 2 ? pal.hot : pal.accent;
+      var a0 = base * (0.75 + seed * 0.5);
+      g.addColorStop(0, rgba(col, a0));
+      g.addColorStop(0.25, rgba(col, a0 * 0.55));
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(fx + nx * spread * 0.18, fy + ny * spread * 0.18);
+      c.lineTo(ex + nx * spread, ey + ny * spread);
+      c.lineTo(ex - nx * spread, ey - ny * spread);
+      c.lineTo(fx - nx * spread * 0.18, fy - ny * spread * 0.18);
+      c.closePath();
+      c.fill();
+    }
+    c.restore();
+  }
+
+  function starfield(w, pal, t) {
+    if (!EM.Polish.stars) return;
+    var c = D.ctx();
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < 84; i++) {
+      var s1 = hash(i * 733 + 11), s2 = hash(i * 997 + 23);
+      var x = (s1 - 0.5) * W * 1.1;
+      var y = (s2 - 0.5) * H * 1.1;
+      var tw = 0.35 + 0.65 * Math.sin(t * (0.4 + s1 * 1.2) + i * 2.7);
+      var a = (0.012 + s1 * 0.040) * tw * (1 + w.love * 0.75);
+      c.fillStyle = rgba([220, 235, 255], a);
+      c.beginPath(); c.arc(x, y, (0.5 + s2 * 1.2) * U, 0, TAU); c.fill();
+    }
+    c.restore();
+  }
+
   /* ==========================================================================
      1. BACKGROUND PLATE
      ======================================================================== */
@@ -31,6 +89,8 @@
     g.addColorStop(1, '#010203');
     D.fill(g);
     D.frect(-W / 2 - 10, -H / 2 - 10, W + 20, H + 20);
+    lightShafts(wstate, pal, t);
+    starfield(wstate, pal, t);
 
     /* scanning raster — the world is being *rendered* */
     var c = D.ctx();
@@ -46,6 +106,7 @@
 
     /* soft ambient colour fields — a faint nebula that never competes with
        the linework, but keeps the void from reading as flat black */
+    if (EM.Polish.ambient) {
     var c0 = D.ctx();
     c0.save();
     c0.globalCompositeOperation = 'lighter';
@@ -67,6 +128,7 @@
       c0.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
     }
     c0.restore();
+    }
 
     /* a slow sweep line that reads as a refresh */
     var sy = ((t * 0.12) % 1.6 - 0.3) * H;
@@ -511,9 +573,15 @@
     /* pick the topology, cross-fading during the seams so the world morphs */
     var shape = SHAPES[w.topo] || SHAPES.grid;
     c.save();
-    c.translate(0, w.vert * -H * 0.02);
-    c.rotate(w.tilt * Math.PI / 180);
-    var zoom = lerp(1, w.scale, 0.5);
+    /* a slow, deterministic camera drift: never enough to read as shake,
+       but enough that the frame feels photographed rather than stamped */
+    var driftX = Math.sin(t * 0.043) * 9 * U * (0.45 + w.chaos * 0.9)
+               + (hash(Math.floor(t * 7) * 17) - 0.5) * w.shatter * 22 * U;
+    var driftY = Math.cos(t * 0.057) * 7 * U * (0.45 + w.chaos * 0.9);
+    var breathe = 1 + Math.sin(t * 0.11) * 0.006 + Math.sin(t * 0.31) * 0.002;
+    c.translate(driftX, driftY + w.vert * -H * 0.02);
+    c.rotate((w.tilt + Math.sin(t * 0.031) * 0.34) * Math.PI / 180);
+    var zoom = lerp(1, w.scale, 0.5) * breathe;
     c.scale(zoom, zoom);
     c.globalAlpha = 1;
     if (w.shatter > 0.01) {

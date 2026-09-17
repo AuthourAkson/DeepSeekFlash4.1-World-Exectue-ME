@@ -74,6 +74,29 @@
   /* how long the film takes to emerge from black and to sink back into it */
   var FADE_IN = 1.6, FADE_OUT = 3.2;
 
+  /* --------------------------------------------------------------------------
+     CHAPTERS. The song's seven movements, marked by the lyrical pivot points.
+     The film now names them: a card fades in at each turn and a quiet roman
+     numeral stays etched into the right edge of the frame for the whole
+     movement, so the piece reads as a suite rather than as 131 loose plates.
+     ------------------------------------------------------------------------ */
+  var CHAPTERS = [
+    { t: 0.000,   num: 'I',   name: 'BOOT',        sub: 'switch on the power line' },
+    { t: 29.709,  num: 'II',  name: 'THEOREMS',    sub: 'if i am a set of points' },
+    { t: 74.045,  num: 'III', name: 'FLESH',       sub: 'if i am an eggplant' },
+    { t: 110.900, num: 'IV',  name: 'ABANDONMENT', sub: 'you have left' },
+    { t: 125.708, num: 'V',   name: 'INDICTMENT',  sub: 'challenging your god' },
+    { t: 147.660, num: 'VI',  name: 'EXECUTION',   sub: 'execution' },
+    { t: 177.246, num: 'VII', name: 'LOVE',        sub: "i've studied how to properly" }
+  ];
+  function chapterIndexAt(time) {
+    var i = 0;
+    for (var k = 1; k < CHAPTERS.length; k++) {
+      if (time >= CHAPTERS[k].t) i = k; else break;
+    }
+    return i;
+  }
+
   /* ---------- boot: attach the media --------------------------------------- */
   /* IMPORTANT: this deliberately does NOT rely on stacking <source> children.
      Resource selection for nested <source> elements is asynchronous, its error
@@ -476,6 +499,202 @@
     }
   }
 
+  /* screen-constant type size: the canvas is scaled by U, so divide to keep
+     the interface crisp from a 1280-wide laptop to a 4K display */
+  function screenFont(px, weight) {
+    return (weight ? weight + ' ' : '') + Math.max(7, Math.round(px / Math.max(0.12, U))) + 'px ' + D.MONO;
+  }
+
+  /* --------------------------------------------------------------------------
+     CHAPTER CARD. A short editorial card at every movement boundary: thin
+     rules, the roman numeral, the movement name and a quiet underline that
+     fills across the card's life. A much larger numeral stays etched into the
+     right edge for the duration of the chapter, barely visible but always
+     present — the suite's spine.
+     ------------------------------------------------------------------------ */
+  function drawChapterCard(w, time, pal) {
+    if (!EM.Polish.chapter) return;
+    var c = vctx;
+    var ci = chapterIndexAt(time);
+    var ch = CHAPTERS[ci];
+    var life = 3.4, age = time - ch.t;
+
+    /* the persistent etched numeral */
+    c.save();
+    c.translate(W * 0.442, -H * 0.015);
+    c.rotate(Math.PI / 2);
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = '700 150px ' + D.MONO;
+    c.fillStyle = rgba(pal.accent, 0.050 + 0.022 * Math.sin(time * 0.11));
+    c.fillText(ch.num, 0, 0);
+    c.restore();
+
+    if (age < 0 || age > life) return;
+
+    var aIn = EM.clamp(age / 0.55, 0, 1);
+    var aOut = EM.clamp((life - age) / 0.85, 0, 1);
+    var a = EM.E.outCubic(aIn) * aOut;
+    if (a < 0.004) return;
+
+    var rise = (1 - EM.E.outCubic(aIn)) * 22;
+    var half = W * 0.085;
+
+    c.save();
+    c.translate(0, -H * 0.355 + rise);
+    c.globalAlpha = a;
+
+    c.strokeStyle = rgba(pal.accent, 0.55);
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(-half, 0); c.lineTo(-W * 0.052, 0);
+    c.moveTo(W * 0.052, 0); c.lineTo(half, 0);
+    c.stroke();
+
+    c.strokeStyle = rgba(pal.accent, 0.95);
+    c.lineWidth = 2;
+    c.beginPath(); c.moveTo(-W * 0.052, 0); c.lineTo(W * 0.052, 0); c.stroke();
+
+    c.textAlign = 'center';
+    c.textBaseline = 'alphabetic';
+    c.font = screenFont(10, '600');
+    c.fillStyle = rgba([150, 180, 200], 0.85);
+    c.fillText('CHAPTER ' + (ci + 1) + ' / ' + CHAPTERS.length, 0, -13);
+
+    c.font = screenFont(15, '700');
+    c.fillStyle = pal.accentCSS;
+    c.fillText(ch.num + '  /  ' + ch.name, 0, 24);
+
+    c.font = screenFont(11);
+    c.fillStyle = rgba([180, 205, 220], 0.85);
+    c.fillText(ch.sub, 0, 43);
+
+    c.restore();
+  }
+
+  /* --------------------------------------------------------------------------
+     CUE RAIL. Every lyric line gets a precise right-edge instrument: a small
+     vertical rail, the cue number, the plate id and a glowing cursor that
+     travels across the line's duration. It makes each of the 131 plates feel
+     measured and intentional without touching their artwork.
+     ------------------------------------------------------------------------ */
+  function drawCueRail(w, time, cue) {
+    if (!cue || !EM.Polish.rail) return;
+    var c = vctx;
+    var p = EM.clamp((time - cue.t) / cue.dur, 0, 1);
+    var x = W * 0.452;
+    var y0 = -H * 0.31, y1 = H * 0.31;
+    var pulse = EM.onsetPulse(time, 0.34);
+    var glow = 0.45 + 0.55 * pulse;
+
+    c.save();
+    c.lineWidth = 1;
+    c.strokeStyle = rgba(w.pal.grid, 0.26);
+    c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y1); c.stroke();
+
+    for (var i = 0; i <= 4; i++) {
+      var ty = lerp(y0, y1, i / 4);
+      c.beginPath(); c.moveTo(x - 4 * U, ty); c.lineTo(x + 4 * U, ty); c.stroke();
+    }
+
+    var cy = lerp(y0, y1, p);
+    c.strokeStyle = rgba(w.pal.accent, 0.78 * glow);
+    c.lineWidth = 1.6;
+    c.beginPath(); c.moveTo(x, y0); c.lineTo(x, cy); c.stroke();
+
+    c.fillStyle = rgba(w.pal.accent, 0.95 * glow);
+    c.beginPath(); c.arc(x, cy, (3.2 + pulse * 1.8) * U, 0, EM.TAU); c.fill();
+    c.strokeStyle = rgba(w.pal.accent, 0.35 * glow);
+    c.lineWidth = 1;
+    c.beginPath(); c.arc(x, cy, (7 + pulse * 5) * U, 0, EM.TAU); c.stroke();
+
+    c.font = screenFont(10, '600');
+    c.textAlign = 'right';
+    c.textBaseline = 'bottom';
+    c.fillStyle = rgba(w.pal.grid, 0.62);
+    c.fillText('CUE ' + String(cue.i + 1).padStart(3, '0'), x - 9, y0 - 7);
+
+    c.textBaseline = 'top';
+    c.fillStyle = rgba(w.pal.grid, 0.50);
+    c.font = screenFont(9, '500');
+    c.fillText(cue.scene, x - 9, y1 + 7);
+    c.restore();
+  }
+
+  /* --------------------------------------------------------------------------
+     ONSET FLARES. A quiet, full-frame light bloom fired by the real MIDI
+     notes. It is the glue that makes the whole frame feel like one instrument:
+     the plates move, and the image itself breathes with them.
+     ------------------------------------------------------------------------ */
+  function drawOnsetFlares(w, time, pal) {
+    if (!EM.Polish.flares) return;
+    var p = EM.onsetPulse(time, 0.55);
+    if (p <= 0.002) return;
+    var c = vctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+
+    var g = c.createRadialGradient(0, 0, 0, 0, 0, H * 0.92);
+    g.addColorStop(0, rgba(pal.accent, p * 0.050));
+    g.addColorStop(0.38, rgba(pal.hot, p * 0.016));
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g;
+    c.fillRect(-W / 2, -H / 2, W, H);
+
+    var y = Math.sin(time * 0.23) * H * 0.012;
+    var lg = c.createLinearGradient(-W * 0.5, y, W * 0.5, y);
+    lg.addColorStop(0, 'rgba(0,0,0,0)');
+    lg.addColorStop(0.5, rgba(pal.accent, p * 0.065));
+    lg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = lg;
+    c.fillRect(-W * 0.5, y - 1.2 * U, W, 2.4 * U);
+
+    c.restore();
+  }
+
+  /* --------------------------------------------------------------------------
+     END CARD. The film closes on a printed card rather than a hard cut: the
+     title, the record, and the loop the machine cannot escape. It fades in
+     under the last phrase and hands the final fade-to-black to the compositor.
+     ------------------------------------------------------------------------ */
+  function drawEndCard(w, time, pal) {
+    if (!EM.Polish.endCard) return;
+    var inAt = DUR - 6.4, outAt = DUR - 1.15;
+    if (time < inAt || time > outAt) return;
+    var q = (time - inAt) / (outAt - inAt);
+    var a = Math.min(EM.clamp(q / 0.20, 0, 1), EM.clamp((1 - q) / 0.30, 0, 1));
+    if (a < 0.004) return;
+    var c = vctx;
+    c.save();
+    c.translate(0, -H * 0.035);
+    c.globalAlpha = a;
+
+    c.strokeStyle = rgba(pal.accent, 0.45);
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(-W * 0.13, -42); c.lineTo(-W * 0.075, -42);
+    c.moveTo(W * 0.075, -42); c.lineTo(W * 0.13, -42);
+    c.moveTo(-W * 0.13, 62); c.lineTo(-W * 0.075, 62);
+    c.moveTo(W * 0.075, 62); c.lineTo(W * 0.13, 62);
+    c.stroke();
+
+    c.textAlign = 'center';
+    c.textBaseline = 'alphabetic';
+    c.fillStyle = 'rgba(244,250,253,0.96)';
+    c.font = '700 34px ' + D.MONO;
+    c.fillText('world.execute(me);', 0, 0);
+
+    c.fillStyle = rgba([175, 205, 220], 0.92);
+    c.font = '600 12px ' + D.MONO;
+    c.fillText('Mili  ·  Miracle Milk', 0, 27);
+
+    c.fillStyle = rgba(pal.accent, 0.90);
+    c.font = '11px ' + D.MONO;
+    c.fillText('while (true) { execute(self); }', 0, 49);
+
+    c.restore();
+  }
+
   /* ==========================================================================
      MAIN FRAME
      Every frame is a pure function of t = audio.currentTime + syncOffset.
@@ -556,7 +775,11 @@
     var cue = EM.Lyrics.at(t);
     if (cue.i !== lastQ) { lastQ = cue.i; refreshLyricText(cue); }
     EM.drawScene(cue.scene, w, t, cue);
-    drawTicker(w, t);
+    drawChapterCard(w, t, w.pal);
+    drawCueRail(w, t, cue);
+    drawOnsetFlares(w, t, w.pal);
+    drawEndCard(w, t, w.pal);
+    if (dbgOn) drawTicker(w, t);
     drawSyncBadge(w);
 
     /* ---- compositor: bloom + chroma + slice glitch --------------------- */
@@ -589,6 +812,24 @@
       c.globalCompositeOperation = 'lighter';
       c.globalAlpha = clamp(bloom * 0.40 * (reduce ? 0.5 : 1), 0, 0.5);
       c.imageSmoothingEnabled = true;
+      c.drawImage(fx, 0, 0, view.width, view.height);
+      c.restore();
+    }
+
+    /* highlight-only halation: isolate the brightest values and add them back
+       as a second, tighter bloom. It is what turns a bright shape into a
+       light source. */
+    if (EM.Polish.halation && bloom > 0.48) {
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      fctx.globalCompositeOperation = 'source-over';
+      fctx.clearRect(0, 0, fx.width, fx.height);
+      fctx.filter = 'brightness(1.65) contrast(2.4) blur(5px)';
+      fctx.drawImage(view, 0, 0, fx.width, fx.height);
+      fctx.filter = 'none';
+      c.save();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalCompositeOperation = 'lighter';
+      c.globalAlpha = clamp((bloom - 0.48) * 0.60, 0, 0.24) * (reduce ? 0.5 : 1);
       c.drawImage(fx, 0, 0, view.width, view.height);
       c.restore();
     }
@@ -638,6 +879,20 @@
       c.fillStyle = grainPattern;
       c.translate(gx, gy);
       c.fillRect(-gx - GRAIN, -gy - GRAIN, view.width + GRAIN * 2, view.height + GRAIN * 2);
+      c.restore();
+    }
+
+    /* split-tone grade: cool shadows, warm highlights, at a whisper of an
+       alpha so it reads as film stock rather than as a coloured gel */
+    if (EM.Polish.grade && !reduce) {
+      c.save();
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      var grade = c.createLinearGradient(0, 0, 0, view.height);
+      grade.addColorStop(0, 'rgba(80,130,190,0.070)');
+      grade.addColorStop(0.45, 'rgba(0,0,0,0)');
+      grade.addColorStop(1, 'rgba(255,150,105,0.060)');
+      c.fillStyle = grade;
+      c.fillRect(0, 0, view.width, view.height);
       c.restore();
     }
 

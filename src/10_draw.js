@@ -105,11 +105,19 @@
   function text(s, x, y, align, baseline) {
     var c = ctx;
     var f = readable(curFill, 4.5);
-    if (f !== curFill) c.fillStyle = f;
+    c.save();
+    c.fillStyle = f;
     c.textAlign = align || 'left';
     c.textBaseline = baseline || 'alphabetic';
+    /* a whisper of shadow keeps type legible over bright plates without
+       changing the colour or the geometry of the drawing underneath */
+    if (EM.Polish.textShadow) {
+      c.shadowColor = 'rgba(0,0,0,0.55)';
+      c.shadowBlur = 4;
+      c.shadowOffsetY = 1;
+    }
     c.fillText(s, x, y);
-    if (f !== curFill) c.fillStyle = curFill;
+    c.restore();
   }
   function measure(s, px, weight, family) { font(px, weight, family); return ctx.measureText(s).width; }
 
@@ -120,47 +128,64 @@
     var track = opt.track === undefined ? px * 0.08 : opt.track;
     p = clamp(p, 0, 1);
     var n = Math.ceil(s.length * p);
+    var c = ctx, prevFill = curFill;
+    c.save();
     font(px, opt.weight, opt.family);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = opt.baseline || 'alphabetic';
+    c.textAlign = 'left';
+    c.textBaseline = opt.baseline || 'alphabetic';
     var gc = readable(curFill, 4.5);
+    if (opt.glow) {
+      c.shadowBlur = px * 0.7;
+      c.shadowColor = gc;
+    } else if (EM.Polish.textShadow) {
+      c.shadowColor = 'rgba(0,0,0,0.48)';
+      c.shadowBlur = 3;
+      c.shadowOffsetY = 1;
+    }
     var cx = x, i, ch, cw;
     for (i = 0; i < n; i++) {
       ch = s.charAt(i);
-      cw = ctx.measureText(ch).width;
-      ctx.fillStyle = gc;
-      if (opt.glow) { ctx.shadowBlur = px * 0.7; ctx.shadowColor = gc; }
-      ctx.fillText(ch, cx, y);
-      ctx.shadowBlur = 0;
+      cw = c.measureText(ch).width;
+      c.fillStyle = gc;
+      c.fillText(ch, cx, y);
       cx += cw + track;
     }
-    ctx.fillStyle = curFill;
+    c.shadowBlur = 0;
     if (opt.cursor !== false) {
       var blink = opt.blink === undefined ? 1 : opt.blink;
       if (blink > 0.35 && p < 1) {
-        fill(curStroke);
-        ctx.globalAlpha = 0.5 + 0.5 * blink;
-        frect(cx + track, y - px * 0.78, px * 0.5, px * 0.86);
-        ctx.globalAlpha = 1;
-        fill(curFill);
+        c.globalAlpha = 0.5 + 0.5 * blink;
+        c.fillStyle = curStroke;
+        c.fillRect(cx + track, y - px * 0.78, px * 0.5, px * 0.86);
+        c.globalAlpha = 1;
       }
     }
+    c.restore();
+    /* keep the module-level paint state exactly where the caller left it */
+    fill(prevFill);
     return cx - x;
   }
 
   /* spaced monospace text (the "terminal heading" look) */
   function spaced(s, x, y, px, tracking, align) {
+    var c = ctx;
+    c.save();
     font(px);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    c.textAlign = 'left'; c.textBaseline = 'alphabetic';
     var t = tracking === undefined ? px * 0.34 : tracking;
     var gc = readable(curFill, 4.5);
     var total = 0, i, wds = [];
-    for (i = 0; i < s.length; i++) { wds.push(ctx.measureText(s.charAt(i)).width); total += wds[i] + t; }
+    for (i = 0; i < s.length; i++) { wds.push(c.measureText(s.charAt(i)).width); total += wds[i] + t; }
     total -= t;
     var cx = align === 'center' ? x - total / 2 : (align === 'right' ? x - total : x);
-    ctx.fillStyle = gc;
-    for (i = 0; i < s.length; i++) { ctx.fillText(s.charAt(i), cx, y); cx += wds[i] + t; }
-    ctx.fillStyle = curFill;
+    c.fillStyle = gc;
+    if (EM.Polish.textShadow) {
+      c.shadowColor = 'rgba(0,0,0,0.50)';
+      c.shadowBlur = 4;
+      c.shadowOffsetY = 1;
+    }
+    for (i = 0; i < s.length; i++) { c.fillText(s.charAt(i), cx, y); cx += wds[i] + t; }
+    c.restore();
     return total;
   }
 

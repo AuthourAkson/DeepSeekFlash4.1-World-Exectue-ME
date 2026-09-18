@@ -24,23 +24,6 @@ window.EM = window.EM || {};
      ------------------------------------------------------------------------- */
   EM.Settings = { useVideo: false };
 
-  /* Optional atmosphere layers. Every effect added for the polished edition
-     can be switched off individually, which keeps the film tunable on slow
-     machines and makes the performance envelope measurable rather than
-     magical. Defaults are the full experience. */
-  EM.Polish = {
-    ambient: true,   /* soft radial colour fields in the background */
-    shafts: true,    /* volumetric light shafts */
-    stars: true,     /* breathing starfield */
-    chapter: true,   /* chapter cards + etched numerals */
-    rail: true,      /* right-edge cue progress rail */
-    flares: true,    /* full-frame MIDI onset flare */
-    halation: true,  /* second highlight-only bloom pass */
-    grade: true,     /* split-tone colour grade */
-    endCard: true,   /* closing printed card */
-    textShadow: true /* subtle drop shadow on all drawn type */
-  };
-
   /* ---------------------------------------------------------------------------
      MIDI NOTE ONSETS  (from the supplied world.execute (me) ;.mid)
      [time_ms, lowest_note, highest_note, simultaneous_notes, velocity]

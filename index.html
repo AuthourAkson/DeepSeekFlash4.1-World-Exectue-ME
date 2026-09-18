@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>world.execute(me); — the polished instrument</title>
+<title>world.execute(me); — a realtime interpretation</title>
 <!--
   ============================================================================
-  world.execute(me);  —  a more polished edition
+  world.execute(me);  —  an animation built entirely from audio.currentTime
   ============================================================================
-  Double-click this file. No server, no build, no network.
+  Open this file directly (double-click). No server, no build, no network.
   The song is read from "Mili - world.execute (me) ;.mp3" next to this file.
+  Nothing is fetched from the internet, and no lyrics service is involved:
+  the timeline lives in this file and in src/20_lyrics.js.
 
   Keys:   space play/pause   ← → seek 5s   shift+← → seek 1s
           , . nudge sync -/+10 ms   (shift = 1 ms)   / reset sync
@@ -32,27 +34,11 @@
          fails the load with MEDIA_ERR_SRC_NOT_SUPPORTED (code 4). Nothing here
          needs CORS: the film never reads media pixels back. -->
     <audio id="audio" preload="auto"></audio>
-
-    <div id="boot-msg">loading the song…</div>
-
-    <div id="start-hint">
-      <button id="start-btn" class="start-btn" aria-label="begin">
-        <span class="ring r1"></span>
-        <span class="ring r2"></span>
-        <span class="ring r3"></span>
-        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l12 7-12 7z"/></svg>
-      </button>
-      <div class="start-title"><span class="sig">world.execute(me);</span></div>
-      <div class="start-sub">Mili &middot; Miracle Milk &nbsp;/&nbsp; a realtime interpretation</div>
-      <div class="keys">
-        <span><kbd>space</kbd> play</span>
-        <span><kbd>←</kbd><kbd>→</kbd> seek</span>
-        <span><kbd>,</kbd><kbd>.</kbd> sync</span>
-        <span><kbd>F</kbd> fullscreen</span>
-        <span><kbd>D</kbd> debug</span>
-      </div>
+    <div id="boot-msg">loading the song…</div>    <div id="start-hint">
+      <span class="ring"></span>
+      <span class="txt">click anywhere to begin</span>
+      <span class="sub">space play / pause &nbsp;·&nbsp; ← → seek &nbsp;·&nbsp; , . sync &nbsp;·&nbsp; f fullscreen &nbsp;·&nbsp; d debug</span>
     </div>
-
     <div id="toast"></div>
   </div>
 
@@ -71,14 +57,13 @@
   </header>
 
   <div id="panel">
-    <div id="lyric-meta">line 1 / 131</div>
+    <div id="lyric-meta">line 1 / 95</div>
     <div id="lyric-line" class="typing">(pre-roll)</div>
     <div id="lyric-next-wrap"><span class="lbl">next</span><span id="lyric-next">—</span></div>
   </div>
 
   <footer id="ctrl" class="ctrl">
     <div id="wave" class="ctrl" role="slider" aria-label="seek" tabindex="0">
-      <canvas id="wave-canvas" aria-hidden="true"></canvas>
       <div id="wave-buf"></div>
       <div id="wave-fill"></div>
       <div id="marks"></div>
@@ -87,7 +72,7 @@
 
     <div class="row">
       <div class="grp">
-        <button id="btn-play" class="btn icon is-primary" aria-label="Play">
+        <button id="btn-play" class="btn icon" aria-label="Play">
           <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l12 7-12 7z"/></svg>
           <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
         </button>
@@ -120,9 +105,6 @@
 
   <div id="toast-host"></div>
 </div>
-
-<div id="dbg" class="debug-flag" aria-hidden="true"></div>
-<div id="media" aria-hidden="true"></div>
 
 <!-- ==========================================================================
      LYRICS + TIMELINE, embedded. Nothing is fetched at runtime.

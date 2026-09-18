@@ -1,108 +1,43 @@
 /* ============================================================================
-   render-png.js — rasterise real frames of the film to PNG so they can be
-   looked at. Uses the software rasteriser in raster.js; text is drawn as
-   measured placeholder boxes (its exact glyphs are not needed to judge
-   placement, scale and composition).
-   ==========================================================================*/
-const fs = require('fs'), path = require('path');
-const { createEnv } = require('./stub-env');
-const { createRaster } = require('./raster');
+ * _tools/render-png.js — 把某一时刻的画面导出成 PNG
+ * ----------------------------------------------------------------------------
+ *   node _tools/render-png.js 82          → _tools/shots/frame-082.png
+ *   node _tools/render-png.js 82 130 180  → 一次导出多帧
+ *
+ * 用的是本仓库自己的软件光栅器（_tools/harness.js），不装任何依赖。
+ * 它有几个**已知近似**，看 PNG 的时候请记住：
+ *   · 文字不做字形光栅化，落成实心块（所以字是方块，别以为作品坏了）
+ *   · 渐变按扫描线中点取样
+ *   · clip() 用包围盒近似
+ * 想看到真正的画面，用 _tools/browser-check.js 让 headless Chrome 截一张
+ * 真·canvas 的图 —— 那个才是作品的实际输出。
+ * ==========================================================================*/
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const H = require('./harness');
 
-const W = 1600, H = 900;
-const outDir = path.join(__dirname, 'preview');
+const args = process.argv.slice(2).map(Number).filter(v => isFinite(v));
+const times = args.length ? args : [82];
+const outDir = path.join(H.ROOT, '_tools', 'shots');
 fs.mkdirSync(outDir, { recursive: true });
 
-/* monospace metrics: enough to place placeholder boxes where the real text is */
-function textWidth(s, px) { return String(s).length * px * 0.6; }
+const win = H.boot({ quiet: true });   // 只关心画面，不用听音频加载失败的告警
+const WX = win.WX;
+const ctx = win._els.stage.getContext();
+const R = H.makeRenderer(WX, ctx);
 
-function renderPNG(t, opts) {
-  opts = opts || {};
-  const env = createEnv({ quiet: true });
-  const EM = env.EM, D = EM.D;
-  const r = createRaster(W * (opts.scale || 1), H * (opts.scale || 1), opts.ss || 2);
-  const s = opts.scale || 1;
-
-  let m = null;
-  const origSetTransform = r.setTransform;
-  /* track the current matrix ourselves so text boxes can be positioned */
-  let cur = [1, 0, 0, 1, 0, 0];
-  const stack = [];
-  r.setTransform = (a, b, c, d, e, f) => { cur = [a, b, c, d, e, f]; origSetTransform(a, b, c, d, e, f); };
-  const wrap = (name, fn) => {
-    const o = r[name].bind(r);
-    r[name] = (...a) => { fn(a); return o(...a); };
-  };
-  wrap('translate', a => { cur = mul(cur, [1, 0, 0, 1, a[0], a[1]]); });
-  wrap('scale', a => { cur = mul(cur, [a[0], 0, 0, a[1], 0, 0]); });
-  wrap('rotate', a => { cur = mul(cur, [Math.cos(a[0]), Math.sin(a[0]), -Math.sin(a[0]), Math.cos(a[0]), 0, 0]); });
-  const origSave = r.save.bind(r), origRestore = r.restore.bind(r);
-  r.save = () => { stack.push(cur.slice()); origSave(); };
-  r.restore = () => { const p = stack.pop(); if (p) cur = p; origRestore(); };
-
-  /* text as measured boxes translucent, so the artwork underneath stays visible */
-  r.fillText = function (txt, x, y) {
-    txt = String(txt);
-    if (!txt) return;
-    const px = parseFloat((r.font.match(/(\d+(\.\d+)?)px/) || [0, 14])[1]) || 14;
-    const wpx = textWidth(txt, px) * s;
-    const hpx = px * s;
-    const tx = cur[0] * x * s + cur[2] * y * s + cur[4] * s;
-    const ty = cur[1] * x * s + cur[3] * y * s + cur[5] * s;
-    /* x offset depends on alignment */
-    let ox = 0;
-    if (r.textAlign === 'center') ox = -wpx / 2;
-    else if (r.textAlign === 'right') ox = -wpx;
-    let oy = 0;
-    if (r.textBaseline === 'middle') oy = -hpx / 2;
-    else if (r.textBaseline === 'top') oy = 0;
-    else if (r.textBaseline === 'bottom') oy = -hpx;
-    else oy = -hpx * 0.78;
-    const col = typeof r.fillStyle === 'string' && r.fillStyle[0] === '#' ? r.fillStyle : '#cfe6f2';
-    r.save();
-    r.globalAlpha = Math.min(0.5, (r.globalAlpha || 1) * 0.5);
-    r.fillStyle = col;
-    r.fillRect((tx + ox) / s, (ty + oy) / s, wpx / s, hpx / s);
-    r.restore();
-  };
-  r.strokeText = function () {};
-
-  function mul(a, b) {
-    return [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
-            a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
-            a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
-  }
-
-  /* the same transform the app's resetView() applies */
-  r.setTransform(1, 0, 0, 1, 0, 0);
-  r.fillStyle = '#000';
-  r.fillRect(0, 0, W, H);
-  r.setTransform(1, 0, 0, 1, 0, 0);
-  r.translate(W / 2, H / 2);
-
-  D.bind(r, W, H);
-  EM.WorldLayer.frame(W, H, 1, 0, 0);
-
-  const w = EM.World.at(t);
-  w.time = t; w.pal = EM.World.palette(w); w.U = 1;
-  EM.WorldLayer.draw(w, w.pal, t, 0);
-
-  const cue = EM.Lyrics.at(t);
-  EM.drawScene(cue.scene, w, t, cue);
-
-  return { png: r.toPNG(), cue: cue, scene: cue.scene };
-}
-
-module.exports = { renderPNG };
-
-if (require.main === module) {
-  const args = process.argv.slice(2);
-  const times = args.filter(a => !isNaN(parseFloat(a)) && isFinite(parseFloat(a))).map(parseFloat);
-  const list = times.length ? times : [8.0, 31.5, 82.0, 113.0, 148.0, 196.0];
-  for (const t of list) {
-    const out = renderPNG(t);
-    const name = t.toFixed(2).replace('.', '_') + 's_' + out.scene + '.png';
-    fs.writeFileSync(path.join(outDir, name), out.png);
-    console.log(t.toFixed(2).padStart(7) + 's  ' + out.scene.padEnd(18) + ' "'
-      + out.cue.text.slice(0, 34) + '"  ->  ' + name + '  (' + (out.png.length / 1024).toFixed(0) + ' kB)');
-  }
+for (const t of times) {
+  const f = R.frame(t, true);
+  const r = H.raster(f.ops);
+  const name = 'frame-' + t.toFixed(2).padStart(6, '0') + '.png';
+  const file = path.join(outDir, name);
+  const bytes = H.writePng(file, r);
+  const cue = WX.CUES[f.idx];
+  const w = f.w;
+  console.log('t=' + t.toFixed(2).padStart(7) + ' s   cue#' + String(f.idx + 1).padStart(3) + ' ' + cue.scene +
+    '   "' + cue.text + '"   primitives=' + f.ops.length + '   lit=' + (100 * H.litFraction(r)).toFixed(1) + '%' +
+    '\n             section=' + WX.WORLD.section(t) + '  struct=' + w.struct.toFixed(2) + ' chaos=' + w.chaos.toFixed(2) +
+    ' warm=' + w.warm.toFixed(2) + ' heat=' + w.heat.toFixed(2) + ' rot=' + w.rot.toFixed(2) + ' love=' + w.love.toFixed(2) + ' topo=' + w.topoName +
+    '\n             → ' + path.relative(H.ROOT, file) + ' (' + (bytes / 1024).toFixed(0) + ' KB, ' + H.RW + '×' + H.RH + ', 文字近似为方块)');
 }

@@ -1,152 +1,134 @@
 /* ============================================================================
-   world.execute(me); — 01_world.js
-   The persistent "simulation" the whole film lives inside.
-
-   Everything visual is driven from ONE number: audio.currentTime (seconds).
-   worldAt(t) returns the interpolated global state of the world. Lyric plates
-   read this state, so the world decays / warms / shatters *continuously*
-   underneath the per-line visuals. That is what keeps 95 discrete tableaux
-   feeling like one film instead of a slideshow.
-   ==========================================================================*/
+ * 01_world.js — 世界状态曲线 + 调色板
+ * ----------------------------------------------------------------------------
+ * 观众看到的不是"机器人在谈恋爱"的插画，而是这台机器的显示器的输出：
+ * 一个逐渐被它自己无法处理的数据撑坏的系统。整块屏幕由下面这几个参数驱动，
+ * 它们全是时间的函数（关键帧线性插值），所以画面永远是 t 的纯函数：
+ *
+ *   struct  世界还遵守自己规则的程度        1 → 0.03
+ *   chaos   几何失序 / 抖动                 0.03 → 0.86
+ *   warm    0 = 显示器冷蓝  1 = 体温        0 → 0.86
+ *   heat    0 = 安全        1 = 报警红      0 → 1.0 → 0
+ *   rot     0 = 干净代码    1 = 有机物      0 → 0.66 → 0
+ *   love    这台机器不该拥有的变量          0 → 1.0
+ *   topo    grid → sphere → wave → organic → tangle → open
+ * ==========================================================================*/
 (function (global) {
   'use strict';
+  var WX = global.WX, EM = WX.EM;
 
-  var EM = global.EM;
+  var KEYS = {
+    //        启动        证明自己        血肉          被抛下          指控          处决          LO-O-OVE      开环/尾奏
+    //         0     16     29.7   44.5   74     110.9  117.3  125.7  134.4  147.7  175.0  193.5  211.984
+    struct: [[0, 1.00], [16, 0.99], [29.7, 0.97], [44.5, 0.94], [59.2, 0.90], [74.0, 0.82], [103.5, 0.62], [110.9, 0.46], [125.7, 0.40], [147.7, 0.26], [175.0, 0.16], [193.5, 0.07], [211.98, 0.03]],
+    chaos: [[0, 0.03], [13.9, 0.05], [29.7, 0.07], [44.5, 0.10], [74.0, 0.18], [103.5, 0.30], [110.9, 0.48], [125.7, 0.58], [147.7, 0.74], [158.0, 0.86], [175.0, 0.86], [193.5, 0.34], [211.98, 0.12]],
+    warm: [[0, 0.00], [29.7, 0.00], [74.0, 0.04], [85.0, 0.12], [103.5, 0.18], [110.9, 0.10], [117.3, 0.06], [147.7, 0.04], [175.0, 0.26], [185.0, 0.62], [193.5, 0.72], [211.98, 0.86]],
+    heat: [[0, 0.00], [110.9, 0.06], [117.3, 0.02], [125.7, 0.16], [131.2, 0.62], [147.7, 0.80], [152.0, 1.00], [168.0, 0.92], [175.0, 0.60], [185.0, 0.22], [193.5, 0.08], [211.98, 0.00]],
+    rot: [[0, 0.00], [74.0, 0.00], [85.0, 0.10], [103.5, 0.30], [110.9, 0.42], [131.0, 0.52], [147.7, 0.62], [166.0, 0.66], [175.0, 0.58], [185.0, 0.34], [193.5, 0.10], [211.98, 0.00]],
+    love: [[0, 0.00], [74.0, 0.00], [110.9, 0.05], [117.3, 0.10], [125.7, 0.12], [147.7, 0.10], [175.0, 0.30], [179.9, 0.62], [187.7, 0.88], [193.5, 1.00], [211.98, 1.00]],
+    topo: [[0, 0], [13.9, 1], [29.7, 2], [50.0, 1.6], [74.0, 3], [110.9, 3.4], [125.7, 4], [147.7, 4.4], [175.0, 4.2], [187.7, 5], [195.0, 5.2], [211.98, 6]]
+  };
+  var NAMES = ['grid', 'sphere', 'wave', 'organic', 'tangle', 'open'];
 
-  /* --------------------------------------------------------------------------
-     THE WORLD ARC  (read the table like a score)
-     --------------------------------------------------------------------------
-     struct   how much of the drawn world still obeys its own rules (1 = perfect)
-     chaos    geometric disorder / jitter / shattered shards
-     warm     0 = cryogenic monitor blue, 1 = body heat
-     heat     0 = safe, 1 = alarm / metal-under-strain
-     rot      0 = clean code, 1 = organic growth (vines, flesh, purr)
-     love     the forbidden variable the machine is not allowed to have
-     density  how many particles / nodes are alive
-     scale    how zoomed-in the camera is (1 = wide)
-     tilt     roll of the whole world, degrees
-     vert     vertical drop (the pit; rises to +1 at "ISOLATION")
-     shatter  0..1 - shard displacement applied to world geometry
-     glow     bloom amount
-     topo     'grid' -> 'sphere' -> 'wave' -> 'organic' -> 'tangle' -> 'open'
-     alarm    'idle' | 'warn' | 'error' | 'exec'
-     ------------------------------------------------------------------------ */
-  var KEYS = [
-    [0.000, { struct: 0.08, chaos: 0.12, warm: 0.00, heat: 0.00, rot: 0.00, love: 0.00, density: 0.13, scale: 1.30, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.30, topo: 'grid',    alarm: 'idle' }],
-    [1.000, { struct: 0.26, chaos: 0.07, warm: 0.00, heat: 0.00, rot: 0.00, love: 0.00, density: 0.24, scale: 1.24, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.36, topo: 'grid' }],
-    [6.400, { struct: 0.64, chaos: 0.05, warm: 0.02, heat: 0.00, rot: 0.00, love: 0.00, density: 0.46, scale: 1.08, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.44, topo: 'grid' }],
-    [13.900,{ struct: 0.92, chaos: 0.03, warm: 0.03, heat: 0.00, rot: 0.00, love: 0.00, density: 0.66, scale: 0.99, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.48, topo: 'grid' }],
-    [16.000,{ struct: 0.86, chaos: 0.07, warm: 0.10, heat: 0.00, rot: 0.01, love: 0.00, density: 0.56, scale: 1.04, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.46, topo: 'sphere' }],
-    [26.000,{ struct: 0.80, chaos: 0.16, warm: 0.16, heat: 0.00, rot: 0.03, love: 0.00, density: 0.60, scale: 0.98, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.44, topo: 'sphere' }],
-    [29.700,{ struct: 0.90, chaos: 0.06, warm: 0.04, heat: 0.00, rot: 0.00, love: 0.00, density: 0.72, scale: 0.96, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.36, topo: 'grid' }],
-    [59.200,{ struct: 0.82, chaos: 0.10, warm: 0.12, heat: 0.00, rot: 0.00, love: 0.02, density: 0.76, scale: 0.94, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.36, topo: 'wave' }],
-    [74.000,{ struct: 0.74, chaos: 0.12, warm: 0.26, heat: 0.00, rot: 0.48, love: 0.05, density: 0.74, scale: 0.92, tilt: -0.4,vert: 0.00, shatter: 0.00, glow: 0.38, topo: 'organic' }],
-    [88.600,{ struct: 0.70, chaos: 0.14, warm: 0.34, heat: 0.02, rot: 0.62, love: 0.08, density: 0.72, scale: 0.92, tilt: 0.6, vert: 0.00, shatter: 0.00, glow: 0.40, topo: 'organic' }],
-    [103.400,{struct: 0.68, chaos: 0.16, warm: 0.30, heat: 0.03, rot: 0.66, love: 0.14, density: 0.74, scale: 0.90, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.42, topo: 'organic' }],
-    [110.900,{struct: 0.62, chaos: 0.28, warm: 0.10, heat: 0.04, rot: 0.30, love: 0.06, density: 0.55, scale: 0.94, tilt: 0.0, vert: 0.10, shatter: 0.04, glow: 0.32, topo: 'tangle' }],
-    [117.300,{struct: 0.34, chaos: 0.46, warm: 0.00, heat: 0.06, rot: 0.02, love: 0.00, density: 0.26, scale: 1.02, tilt: 0.0, vert: 0.85, shatter: 0.20, glow: 0.18, topo: 'tangle' }],
-    [121.700,{struct: 0.30, chaos: 0.50, warm: 0.00, heat: 0.08, rot: 0.00, love: 0.00, density: 0.22, scale: 1.04, tilt: 0.0, vert: 0.92, shatter: 0.24, glow: 0.16, topo: 'tangle' }],
-    [125.700,{struct: 0.42, chaos: 0.40, warm: 0.02, heat: 0.34, rot: 0.00, love: 0.00, density: 0.44, scale: 0.98, tilt: 0.0, vert: 0.40, shatter: 0.16, glow: 0.36, topo: 'tangle', alarm: 'warn' }],
-    [134.400,{struct: 0.46, chaos: 0.46, warm: 0.00, heat: 0.62, rot: 0.00, love: 0.00, density: 0.50, scale: 0.94, tilt: 0.0, vert: 0.20, shatter: 0.20, glow: 0.46, topo: 'tangle', alarm: 'error' }],
-    [147.700,{struct: 0.52, chaos: 0.60, warm: 0.00, heat: 0.88, rot: 0.00, love: 0.02, density: 0.66, scale: 0.98, tilt: 0.0, vert: 0.00, shatter: 0.26, glow: 0.58, topo: 'tangle', alarm: 'exec' }],
-    [158.000,{struct: 0.44, chaos: 0.70, warm: 0.00, heat: 1.00, rot: 0.00, love: 0.04, density: 0.82, scale: 1.02, tilt: 0.0, vert: 0.00, shatter: 0.34, glow: 0.72, topo: 'tangle', alarm: 'exec' }],
-    [170.000,{struct: 0.38, chaos: 0.78, warm: 0.00, heat: 1.00, rot: 0.00, love: 0.10, density: 0.90, scale: 1.06, tilt: 0.0, vert: 0.00, shatter: 0.42, glow: 0.80, topo: 'tangle', alarm: 'exec' }],
-    [177.200,{struct: 0.30, chaos: 0.86, warm: 0.06, heat: 0.92, rot: 0.02, love: 0.34, density: 0.94, scale: 1.10, tilt: 0.0, vert: 0.00, shatter: 0.52, glow: 0.88, topo: 'tangle', alarm: 'exec' }],
-    [184.600,{struct: 0.16, chaos: 0.74, warm: 0.42, heat: 0.48, rot: 0.10, love: 0.74, density: 0.82, scale: 1.04, tilt: 0.0, vert: 0.00, shatter: 0.44, glow: 0.74, topo: 'open',   alarm: 'warn' }],
-    [189.800,{struct: 0.09, chaos: 0.44, warm: 0.66, heat: 0.16, rot: 0.06, love: 0.92, density: 0.62, scale: 1.10, tilt: 0.0, vert: 0.00, shatter: 0.28, glow: 0.62, topo: 'open',   alarm: 'idle' }],
-    [193.400,{struct: 0.03, chaos: 0.12, warm: 0.78, heat: 0.00, rot: 0.00, love: 1.00, density: 0.40, scale: 1.20, tilt: 0.0, vert: 0.00, shatter: 0.08, glow: 0.46, topo: 'open',   alarm: 'idle' }],
-    [205.800,{struct: 0.01, chaos: 0.05, warm: 0.84, heat: 0.00, rot: 0.00, love: 1.00, density: 0.20, scale: 1.32, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.40, topo: 'open',   alarm: 'idle' }],
-    [211.984,{struct: 0.00, chaos: 0.02, warm: 0.86, heat: 0.00, rot: 0.00, love: 1.00, density: 0.10, scale: 1.42, tilt: 0.0, vert: 0.00, shatter: 0.00, glow: 0.36, topo: 'open',   alarm: 'idle' }]
-  ];
-
-  var NUM = ['struct', 'chaos', 'warm', 'heat', 'rot', 'love', 'density', 'scale',
-             'tilt', 'vert', 'shatter', 'glow'];
-  var DISCRETE = ['topo', 'alarm'];
-
-  /* piecewise-linear, monotone: cheap, stable and exactly frame-rate independent */
-  function sample(t) {
-    var lo = KEYS[0], hi = KEYS[KEYS.length - 1], i;
-    for (i = 0; i < KEYS.length - 1; i++) {
-      if (t >= KEYS[i][0] && t <= KEYS[i + 1][0]) { lo = KEYS[i]; hi = KEYS[i + 1]; break; }
+  function sample(keys, t) {
+    var i, a, b;
+    if (t <= keys[0][0]) return keys[0][1];
+    for (i = 1; i < keys.length; i++) {
+      if (t <= keys[i][0]) {
+        a = keys[i - 1]; b = keys[i];
+        var u = EM.smooth((t - a[0]) / Math.max(1e-6, b[0] - a[0]));
+        return a[1] + (b[1] - a[1]) * u;
+      }
     }
-    if (t <= KEYS[0][0]) { lo = hi = KEYS[0]; }
-    if (t >= KEYS[KEYS.length - 1][0]) { lo = hi = KEYS[KEYS.length - 1]; }
-
-    var a = lo[1], b = hi[1];
-    var u = (hi[0] === lo[0]) ? 0 : (t - lo[0]) / (hi[0] - lo[0]);
-    u = u < 0 ? 0 : (u > 1 ? 1 : u);
-    var e = u * u * (3 - 2 * u); /* smoothstep between keys => no velocity jumps */
-
-    var out = {};
-    for (var k = 0; k < NUM.length; k++) {
-      var key = NUM[k];
-      var va = a[key] === undefined ? 0 : a[key];
-      var vb = b[key] === undefined ? va : b[key];
-      out[key] = va + (vb - va) * e;
-    }
-    for (var d = 0; d < DISCRETE.length; d++) {
-      out[DISCRETE[d]] = (e < 0.5 ? a[DISCRETE[d]] : b[DISCRETE[d]]) || a[DISCRETE[d]];
-    }
-    out.time = t;
-    return out;
+    return keys[keys.length - 1][1];
   }
 
-  /* --------------------------------------------------------------------------
-     COLOUR: one palette lerped by the world state.
-     Monitor blue -> sterile white -> arc-weld orange -> alarm red ->
-     flesh / vegetable -> written-paper warmth.
-     ------------------------------------------------------------------------ */
-  var C = EM.color;
+  var WORLD = WX.WORLD = {};
 
-  var PAL = {
-    void:   [4, 6, 10],
-    deep:   [8, 12, 20],
-    ink:    [16, 22, 34],
-    line:   [58, 92, 116],
-    cyan:   [86, 214, 232],
-    white:  [226, 240, 248],
-    warn:   [246, 176, 62],
-    red:    [232, 62, 54],
-    flesh:  [242, 128, 176],
-    paper:  [246, 238, 222],
-    leaf:   [128, 206, 122],
-    violet: [150, 116, 220]
+  /** 世界状态。返回**新对象**——调用方随便存，不会被后续帧改掉。 */
+  WORLD.at = function (t) {
+    var p = {
+      t: t,
+      struct: sample(KEYS.struct, t),
+      chaos: sample(KEYS.chaos, t),
+      warm: sample(KEYS.warm, t),
+      heat: sample(KEYS.heat, t),
+      rot: sample(KEYS.rot, t),
+      love: sample(KEYS.love, t),
+      topo: sample(KEYS.topo, t)
+    };
+    p.topoName = NAMES[Math.min(NAMES.length - 1, Math.round(p.topo))];
+    p.bg = WORLD.bg(p);
+    p.accent = WORLD.accent(p);
+    p.hot = Math.max(p.heat, p.chaos * 0.35);   // 合成器的触发量
+    // 参考 MV 的状态（剪辑表 / 亮度包络 / 颗粒度）
+    var MV = WX.MV;
+    p.mv = MV ? MV.at(t) : null;
+    p.mvOn = !!(MV && MV.ON);
+    if (p.mvOn && p.mv) p.bg = WORLD.gradeBg(p.bg, p.mv);
+    return p;
   };
 
-  function mix(a, b, u) {
-    u = u < 0 ? 0 : (u > 1 ? 1 : u);
-    return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
-  }
-  function css(c, alpha) {
-    if (alpha === undefined) alpha = 1;
-    return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + alpha + ')';
-  }
+  /** MV 模式：把颜色按亮度压成灰，并让整体明暗跟着 MV 的亮度包络走。 */
+  WORLD.grade = function (c, mv) {
+    var g = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    return [EM.clamp(g, 0, 255), EM.clamp(g, 0, 255), EM.clamp(g, 0, 255), c[3] === undefined ? 1 : c[3]];
+  };
+  /** 背景专用：MV 大部分时间很黑（中位 12/255），底色跟着它压暗。 */
+  WORLD.gradeBg = function (c, mv) {
+    var g = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    g = EM.clamp(g * 0.30 + 34 * mv.lum, 0, 255);
+    return [g, g, g, 1];
+  };
+  WORLD.grayOf = function (c) {
+    var v = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    return [v, v, v, c[3] === undefined ? 1 : c[3]];
+  };
 
-  /* derived palette for a world state */
-  function palette(w) {
-    var cold = mix(PAL.deep, PAL.cyan, 0.16 * (1 - w.warm));
-    var accent = mix(PAL.cyan, PAL.white, w.warm * 0.55);
-    accent = mix(accent, PAL.warn, w.heat * 0.85);
-    accent = mix(accent, PAL.red, w.heat * w.heat * 0.9);
-    accent = mix(accent, PAL.flesh, w.rot * 0.55 * (1 - w.heat));
-    accent = mix(accent, PAL.paper, w.love * 0.5 * (1 - w.heat));
-    var grid = mix(PAL.line, accent, 0.34);
-    var hot = mix(mix(PAL.red, PAL.warn, 0.35), PAL.flesh, w.love * 0.35);
-    return {
-      bg0: css(mix(PAL.void, PAL.ink, w.warm * 0.55)),
-      bg1: css(mix(PAL.deep, mix(PAL.ink, PAL.warn, 0.25), w.warm * 0.42 + w.heat * 0.14)),
-      accent: accent,
-      accentCSS: css(accent),
-      grid: grid,
-      gridCSS: css(grid),
-      hot: hot,
-      hotCSS: css(hot),
-      ink: css(mix(PAL.white, PAL.paper, w.warm)),
-      dim: css(mix(PAL.line, accent, 0.22), 0.5),
-      paper: css(mix(PAL.white, PAL.paper, 0.6)),
-      love: css(mix(PAL.flesh, PAL.paper, w.warm * 0.5))
-    };
-  }
+  /** 底色：冷 → 体温 → 报警红。 */
+  WORLD.bg = function (p) {
+    var base = EM.mix(EM.PAL.bg0, EM.PAL.bg1, 0.5 + 0.5 * Math.sin(p.struct * 3.1));
+    var warmBg = EM.mix(EM.PAL.warmBg0, EM.PAL.warmBg1, 0.5);
+    var heatBg = EM.mix(EM.PAL.heatBg0, EM.PAL.heatBg1, 0.5);
+    var c = EM.mix(base, warmBg, EM.clamp(p.warm, 0, 1) * 0.85);
+    c = EM.mix(c, heatBg, EM.clamp(p.heat, 0, 1) * 0.75);
+    return [c[0], c[1], c[2], 1];
+  };
 
-  EM.World = { at: sample, palette: palette, mix: mix, css: css, COLORS: PAL, KEYS: KEYS };
-})(window);
+  /** 强调色：冷蓝 → 体温琥珀 → 报警红；剩下的规则性会把色相往回拉一点。 */
+  WORLD.accent = function (p) {
+    var c = EM.mix(EM.PAL.accent, EM.PAL.warm, EM.clamp(p.warm * 1.05, 0, 1));
+    c = EM.mix(c, EM.PAL.heat, EM.clamp(p.heat, 0, 1) * 0.85);
+    if (p.mvOn && p.mv) c = WORLD.grade([c[0], c[1], c[2], 1], p.mv);   // MV 是纯灰的
+    return c;
+  };
+  WORLD.accent2 = function (p) {
+    var c = EM.mix(EM.PAL.accent2, EM.PAL.warm2, EM.clamp(p.warm * 1.05, 0, 1));
+    c = EM.mix(c, EM.PAL.heat, EM.clamp(p.heat, 0, 1) * 0.6);
+    if (p.mvOn && p.mv) c = WORLD.grade([c[0], c[1], c[2], 1], p.mv);
+    return c;
+  };
+  /** 文字色：暖起来时会轻微变暖，但永远是亮的；MV 模式下就是白。 */
+  WORLD.ink = function (p, a) {
+    var c = EM.mix(EM.PAL.ink, [255, 226, 196], EM.clamp(p.warm * 0.7, 0, 1));
+    if (p && p.mvOn && p.mv) c = [255, 255, 255];
+    return EM.withA(c, a === undefined ? 1 : a);
+  };
+
+  /** 曲式分段（调试叠层与验证工具都会读它）。 */
+  var SECTIONS = [
+    [0.000, 'PRE-ROLL'], [0.100, 'BOOT'], [16.000, 'BOOT.SIM'], [29.709, 'THEOREM'],
+    [44.452, 'CURRENT'], [59.223, 'STIMULATION'], [74.045, 'FLESH'], [88.587, 'GENDER'],
+    [103.489, 'COMPLETION'], [110.900, 'LEFT'], [118.333, 'ERASE'], [125.708, 'CHARGE'],
+    [134.380, 'ARG.STACK'], [147.660, 'EXECUTION'], [175.000, 'LOVE'], [193.460, 'OPEN LOOP'],
+    [206.620, 'OUTRO'], [211.984, 'END']
+  ];
+  WORLD.section = function (t) {
+    var s = SECTIONS[0][1];
+    for (var i = 0; i < SECTIONS.length; i++) if (t >= SECTIONS[i][0]) s = SECTIONS[i][1];
+    return s;
+  };
+  WORLD.SECTIONS = SECTIONS;
+  WORLD.TOPO_NAMES = NAMES;
+
+})(typeof window !== 'undefined' ? window : globalThis);

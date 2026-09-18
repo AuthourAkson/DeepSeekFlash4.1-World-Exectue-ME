@@ -1,539 +1,476 @@
 /* ============================================================================
-   world.execute(me); — 30_world_layer.js
-   The continuous environment. It is NOT a slideshow background: it is the
-   simulation the singer lives in, and it degrades exactly in step with the
-   lyrics — grid -> sphere -> wave -> organic -> tangled -> open.
-
-   Every particle is a pure function of (index, t), so scrubbing the audio
-   backwards produces byte-identical frames. No internal mutable state means
-   a seek can never desynchronise the picture from the sound.
-   ==========================================================================*/
-(function (EM) {
+ * 30_world_layer.js — 持续世界
+ * ----------------------------------------------------------------------------
+ * 从第 0 秒活到第 211.984 秒的那一层。它不是任何一句歌词的插图，
+ * 而是"这台机器的显示系统"本身：网格 → 球 → 波 → 有机 → 乱麻 → 开环，
+ * 由世界参数 topo 连续形变；再叠上音高尺、脉冲环、裂缝、代码雨、HUD。
+ *
+ * 全部由 t 决定；没有一处累积状态。往回拖进度条不会花屏。
+ * ==========================================================================*/
+(function (global) {
   'use strict';
+  var WX = global.WX, EM = WX.EM, D = WX.D, M = WX.D.m;
+  var W = WX.W, H = WX.H;
 
-  var D = EM.D, E = EM.E, TAU = EM.TAU;
-  var clamp = EM.clamp, lerp = EM.lerp, rgba = EM.rgba, hash = EM.hash, noise = EM.noise2;
+  var WL = WX.WL = {};
 
-  var W = 1600, H = 900, CX = 0, CY = 0, U = 1;
+  /* ------------------------------------------------------------- 拓扑场几何 */
 
-  function frame(w, h, u, cx, cy) { W = w; H = h; U = u; CX = cx; CY = cy; }
+  var NN = 150;                      // 节点数（固定，保证画面与性能都可预期）
+  var NX = 15, NY = 10;
+  var PX = [], PY = [];             // 每个节点的"逻辑格"坐标（-1..1）
+  var SPH = [];                      // 单位球上的位置
+  var NBR = [];                      // 邻居表
+  var CX = W / 2, CY = H / 2 - 20, RX = 560, RY = 300;
 
-  /* ==========================================================================
-     1. BACKGROUND PLATE
-     ======================================================================== */
-  function bg(w, pal, wstate, t) {
-    /* Rebuilt every frame on purpose: with no cross-frame cache a frame is a
-       pure function of t, so scrubbing backwards renders exactly what
-       playback rendered. A radial gradient is cheap; correctness is not. */
-    var g = D.ctx().createRadialGradient(CX, CY - H * 0.05, H * 0.06, CX, CY, Math.max(W, H) * 0.78);
-    g.addColorStop(0, pal.bg1);
-    g.addColorStop(0.55, pal.bg0);
-    g.addColorStop(1, '#010203');
-    D.fill(g);
-    D.frect(-W / 2 - 10, -H / 2 - 10, W + 20, H + 20);
+  (function init() {
+    var i, j;
+    for (i = 0; i < NN; i++) {
+      var gx = i % NX, gy = (i / NX) | 0;
+      var u = NX === 1 ? 0 : gx / (NX - 1), v = NY === 1 ? 0 : gy / (NY - 1);
+      PX.push((u - 0.5) * 2);
+      PY.push((v - 0.5) * 2);
+    }
+    var ga = Math.PI * (3 - Math.sqrt(5));
+    for (i = 0; i < NN; i++) {
+      var y = 1 - (i / (NN - 1)) * 2;
+      var r = Math.sqrt(Math.max(0, 1 - y * y));
+      var th = ga * i;
+      SPH.push([Math.cos(th) * r, y, Math.sin(th) * r]);
+    }
+    for (i = 0; i < NN; i++) {
+      j = [];
+      var gx2 = i % NX, gy2 = (i / NX) | 0;
+      if (gx2 > 0) j.push(i - 1);
+      if (gx2 < NX - 1) j.push(i + 1);
+      if (gy2 > 0) j.push(i - NX);
+      if (gy2 < NY - 1) j.push(i + NX);
+      if (gx2 > 0 && gy2 > 0) j.push(i - NX - 1);
+      if (gx2 < NX - 1 && gy2 < NY - 1) j.push(i + NX + 1);
+      NBR.push(j);
+    }
+  })();
 
-    /* scanning raster — the world is being *rendered* */
-    var c = D.ctx();
-    c.save();
-    c.globalAlpha = 0.055 + 0.03 * Math.sin(t * 2);
-    D.stroke('rgba(255,255,255,1)');
-    D.lw(1);
-    var step = 4 * U;
-    c.beginPath();
-    for (var y = -H / 2; y < H / 2; y += step) { c.moveTo(-W / 2, y); c.lineTo(W / 2, y); }
-    c.stroke();
-    c.restore();
+  var nx = new Float32Array(NN), ny = new Float32Array(NN), nz = new Float32Array(NN);
 
-    /* a slow sweep line that reads as a refresh */
-    var sy = ((t * 0.12) % 1.6 - 0.3) * H;
-    c.save();
-    var g2 = c.createLinearGradient(0, sy - 90 * U, 0, sy + 90 * U);
-    g2.addColorStop(0, 'rgba(255,255,255,0)');
-    g2.addColorStop(0.5, rgba(pal.accent, 0.055 + wstate.heat * 0.05));
-    g2.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = g2;
-    c.fillRect(-W / 2, sy - 90 * U, W, 180 * U);
-    c.restore();
+  function modePos(i, mode, t, out) {
+    var u = PX[i], v = PY[i], a, b, r, th;
+    if (mode <= 0.0001) {                        // grid
+      out[0] = CX + u * RX * 0.92; out[1] = CY + v * RY * 0.92; out[2] = 0;
+    } else if (mode <= 1.0001) {                 // sphere
+      a = SPH[i]; th = t * 0.33;
+      var ca = Math.cos(th), sa = Math.sin(th);
+      var X = a[0] * ca - a[2] * sa, Z = a[0] * sa + a[2] * ca;
+      out[0] = CX + X * 330; out[1] = CY + a[1] * 300; out[2] = Z;
+    } else if (mode <= 2.0001) {                 // wave
+      var ph = u * 3.4 + t * 1.1;
+      out[0] = CX + u * RX; out[1] = CY + v * RY * 0.55 + Math.sin(ph) * 88; out[2] = Math.cos(ph);
+    } else if (mode <= 3.0001) {                 // organic
+      r = 1 + 0.34 * (EM.fbm(u * 1.6 + t * 0.12, v * 1.6 - t * 0.07, 11, 4) - 0.5) * 2;
+      out[0] = CX + u * RX * 0.72 * r; out[1] = CY + v * RY * 0.78 * r; out[2] = r - 1;
+    } else if (mode <= 4.0001) {                 // tangle
+      var d1 = EM.fbm(u * 2.2 + t * 0.09, v * 2.2, 23, 4) - 0.5;
+      var d2 = EM.fbm(u * 2.4, v * 2.4 - t * 0.11, 31, 3) - 0.5;
+      out[0] = CX + u * RX * 0.68 + d1 * 260; out[1] = CY + v * RY * 0.68 + d2 * 210; out[2] = d1;
+    } else {                                     // open —— 打开、松开、暖
+      a = SPH[i]; th = t * 0.18;
+      var k = EM.clamp(mode - 5, 0, 1);
+      var rad = 300 + k * 190;
+      var gap = 0.55 * k;
+      var ang = Math.atan2(a[1], a[0]) + th * 0.4;
+      var open = 1 - gap * Math.abs(Math.cos(ang * 0.5));
+      out[0] = CX + Math.cos(ang) * rad * open * (1 + a[2] * 0.25);
+      out[1] = CY + Math.sin(ang) * rad * 0.66 * open;
+      out[2] = a[2];
+    }
   }
 
-  /* ==========================================================================
-     2. THE GRID FIELD — the coordinate system the singer keeps referring to.
-        Rendered as a receding plane with a horizon; breaks into shards as
-        `shatter` rises.
-     ======================================================================== */
-  function gridField(w, pal, t) {
-    var c = D.ctx();
-    var horizon = CY - H * 0.10 + w.vert * H * 0.34;
-    var ok = 1 - clamp(w.shatter * 1.15, 0, 1);
-    var rows = 22, cols = 26;
-    D.lw(1);
+  var tmpA = [0, 0, 0], tmpB = [0, 0, 0];
 
-    c.save();
-    c.beginPath(); c.rect(-W / 2, horizon, W, H / 2 - horizon + H / 2); c.clip();
-
-    /* longitudinal lines converging to a vanishing point */
-    var vpx = 0 + Math.sin(t * 0.13) * 90 * U;
-    for (var i = 0; i <= cols; i++) {
-      var u = i / cols * 2 - 1;
-      var x0 = u * W * 0.95;
-      var a = (1 - Math.abs(u) * 0.55) * 0.30 * ok;
-      D.stroke(rgba(pal.grid, a * (0.5 + w.density * 0.7)));
-      D.line(vpx, horizon, x0, H / 2 + 40 * U);
+  /** 计算本帧的拓扑场坐标（含两档形态之间的连续形变）。 */
+  function buildField(t, w) {
+    var m = EM.clamp(w.topo, 0, 6);
+    var m0 = Math.floor(m), f = m - m0, m1 = Math.min(6, m0 + 1);
+    for (var i = 0; i < NN; i++) {
+      modePos(i, m0, t, tmpA);
+      modePos(i, m1, t, tmpB);
+      nx[i] = tmpA[0] + (tmpB[0] - tmpA[0]) * f;
+      ny[i] = tmpA[1] + (tmpB[1] - tmpA[1]) * f;
+      nz[i] = tmpA[2] + (tmpB[2] - tmpA[2]) * f;
     }
-    /* transverse lines with perspective spacing */
-    for (var r = 1; r <= rows; r++) {
-      var p = r / rows;
-      var yy = horizon + Math.pow(p, 2.4) * (H * 0.62 + H * 0.1);
-      var a2 = p * 0.34 * ok;
-      D.stroke(rgba(pal.grid, a2 * (0.5 + w.density * 0.8)));
-      D.line(-W / 2, yy, W / 2, yy);
-    }
-    c.restore();
   }
 
-  /* ==========================================================================
-     3. PRIMARY TOPOLOGY SHAPES
-        Each returns its own geometry drawn with the shared primitives.
-     ======================================================================== */
-  var SHAPES = {
-    /* 0-29 s : a point lattice. "If I'm a set of points" */
-    grid: function (w, pal, t) {
-      var n = Math.round(lerp(6, 15, w.density));
-      var s = 96 * U;
-      var pulse = EM.onsetPulse(t, 0.3);
-      for (var i = 0; i < n; i++) {
-        for (var j = 0; j < n * 0.6; j++) {
-          var x = (i - (n - 1) / 2) * s;
-          var y = (j - (n * 0.6 - 1) / 2) * s;
-          var d = Math.hypot(x, y) / (n * s * 0.6);
-          if (d > 1.05) continue;
-          var tw = 0.25 + 0.75 * noise(i * 0.7 + 11, j * 0.7 + t * 0.5);
-          var r = (1.1 + tw * 1.5 + pulse * 1.6) * U;
-          var cc = D.ctx();
-          cc.fillStyle = rgba(pal.accent, 0.16 + tw * 0.5);
-          cc.beginPath(); cc.arc(x, y, Math.max(0.2, r * (1 + w.chaos * tw)), 0, TAU); cc.fill();
-        }
-      }
-      /* connect the nearest neighbours: a mesh appears as order grows */
-      var linkA = clamp((w.struct - 0.35) / 0.5, 0, 1);
-      if (linkA > 0.01) {
-        D.lw(0.8); D.stroke(rgba(pal.accent, 0.14 * linkA));
-        var c = D.ctx(); c.beginPath();
-        for (i = 0; i < n; i++) {
-          for (var j2 = 0; j2 < n * 0.6; j2++) {
-            var x1 = (i - (n - 1) / 2) * s, y1 = (j2 - (n * 0.6 - 1) / 2) * s;
-            if (Math.hypot(x1, y1) / (n * s * 0.6) > 1.02) continue;
-            c.moveTo(x1, y1); c.lineTo(x1 + s, y1);
-            c.moveTo(x1, y1); c.lineTo(x1, y1 + s);
-          }
-        }
-        c.stroke();
-      }
-    },
+  /* ------------------------------------------------------------------ 背景 */
 
-    /* 16-29 s and 29-59 s : a wireframe globe of data — the "new world" */
-    sphere: function (w, pal, t) {
-      var R = 250 * U * (1 + EM.onsetPulse(t, 0.34) * 0.05);
-      var rot = t * 0.34;
-      var rings = 16, seg = 30;
-      D.lw(1.1);
-      for (var i = 0; i <= rings; i++) {
-        var phi = i / rings * Math.PI;
-        var y = Math.cos(phi) * R;
-        var rr = Math.sin(phi) * R;
-        D.stroke(rgba(pal.accent, 0.10 + 0.24 * Math.sin(phi)));
-        D.circle(0, y * (1 - w.chaos * 0.12), rr, 0, TAU); D.ctx().stroke();
+  WL.backdrop = function (t, w) {
+    var ctx = D.ctx;
+    var bg = w.bg;
+    D.setBg(bg);
+    var g = D.linear(0, 0, W, H, [[0, EM.mix(bg, [255, 255, 255], 0.05)], [0.55, bg], [1, EM.mix(bg, [0, 0, 0], 0.55)]]);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    D.S.calls++;
+    // 屏幕中部的辉光：随音乐脉冲
+    var pu = EM.pulse(t, 0.30);
+    var glow = EM.mix(w.accent, [255, 255, 255], 0.25);
+    var rg = D.radial(CX, CY - 30, 40, 760, [
+      [0, EM.withA(glow, 0.055 + 0.10 * Math.min(1, pu))],
+      [0.55, EM.withA(glow, 0.02)],
+      [1, EM.withA(glow, 0)]
+    ]);
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    D.S.calls++;
+    // 暗角
+    var vg = D.radial(W / 2, H / 2, 280, 900, [[0, [0, 0, 0, 0]], [1, [0, 0, 0, 0.66]]]);
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    D.S.calls++;
+
+    // 底层网格：世界越"守规矩"，网格越清楚
+    if (w.struct > 0.05) {
+      var sp = 64, al = 0.028 + 0.075 * w.struct, i;
+      var jit = w.chaos * 26;
+      var gm = EM.withA(w.accent, al * 0.75);
+      for (i = 1; i < W / sp; i++) {
+        var x = i * sp + (EM.h(i, 91, (t * 2) | 0) - 0.5) * jit;
+        D.seg(x, 0, x, H, i % 4 === 0 ? gm : EM.withA(gm, al * 0.4), i % 4 === 0 ? 1.1 : 0.7);
       }
-      for (var j = 0; j < seg; j++) {
-        var th = j / seg * Math.PI + rot;
-        D.stroke(rgba(pal.accent, 0.09 + w.density * 0.10));
-        var c = D.ctx();
-        c.beginPath();
-        c.ellipse(0, 0, Math.abs(R * Math.cos(th)) + R * 0.02, R, 0, 0, TAU);
-        c.stroke();
-      }
-      /* travelling data points on the surface */
-      var N = Math.round(lerp(10, 90, w.density));
-      for (var m = 0; m < N; m++) {
-        var u1 = hash(m * 71 + 3) * TAU;
-        var u2 = Math.acos(2 * hash(m * 131 + 7) - 1);
-        var rr2 = R * Math.sin(u2);
-        var px = Math.cos(u1 + rot) * rr2;
-        var py = Math.cos(u2) * R;
-        var depth = (Math.sin(u1 + rot) + 1) / 2;
-        D.ctx().fillStyle = rgba(pal.accent, 0.10 + depth * 0.55);
-        D.ctx().beginPath(); D.ctx().arc(px, py, (0.9 + depth * 1.9) * U, 0, TAU); D.ctx().fill();
-      }
-    },
-
-    /* 59-74 s : a sine wave being dissected into tangents */
-    wave: function (w, pal, t) {
-      var amp = 150 * U, sw = W * 0.92;
-      var c = D.ctx();
-      /* the primary curve */
-      D.lw(2.4); D.stroke(rgba(pal.accent, 0.9));
-      c.beginPath();
-      var n = 220;
-      for (var i = 0; i <= n; i++) {
-        var u = i / n;
-        var x = (u - 0.5) * sw;
-        var ph = u * TAU * 2 + t * 1.6;
-        var y = Math.sin(ph) * amp;
-        if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
-      }
-      c.stroke();
-      /* harmonics stacking as the "STIMULATIONS" grow */
-      var hN = Math.round(clamp(w.density * 4, 1, 5));
-      for (var h = 2; h <= hN + 1; h++) {
-        D.lw(1); D.stroke(rgba(pal.accent, 0.24 / h));
-        c.beginPath();
-        for (i = 0; i <= n; i++) {
-          u = i / n;
-          x = (u - 0.5) * sw;
-          y = Math.sin(u * TAU * 2 * h + t * 1.6 * h) * amp / h;
-          if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
-        }
-        c.stroke();
-      }
-      /* tangent markers riding the wave */
-      var marks = 7;
-      for (var m = 0; m < marks; m++) {
-        var uu = (m + 0.5) / marks;
-        var xx = (uu - 0.5) * sw;
-        var ph2 = uu * TAU * 2 + t * 1.6;
-        var yy = Math.sin(ph2) * amp;
-        var slope = Math.cos(ph2) * amp * TAU * 2 / sw;
-        var tl = 150 * U;
-        D.lw(1.2); D.stroke(rgba(pal.accent, 0.5));
-        D.line(xx - tl, yy - slope * tl, xx + tl, yy + slope * tl);
-        D.fill(rgba(pal.accent, 0.95));
-        D.circle(xx, yy, 3.2 * U); c.fill();
-      }
-    },
-
-    /* 74-105 s : vines. The machine grows a body. */
-    organic: function (w, pal, t) {
-      var vines = 11;
-      for (var v = 0; v < vines; v++) {
-        var seed = v * 977;
-        var x0 = (hash(seed) - 0.5) * W * 0.92;
-        var y0 = H * 0.52;
-        var pts = [[x0, y0]];
-        var len = 7;
-        var dir = (hash(seed + 1) - 0.5) * 0.8;
-        var step = 78 * U;
-        for (var k = 1; k <= len; k++) {
-          dir += (noise(v * 3.1 + k * 0.5, t * 0.35 + v) - 0.5) * 1.1;
-          dir = clamp(dir, -1.35, 1.35);
-          var grow = clamp((t - 74) / 22 + hash(seed + k) * 0.35, 0, 1);
-          if (k / len > grow) break;
-          var px = pts[pts.length - 1][0] + Math.sin(dir) * step;
-          var py = pts[pts.length - 1][1] - Math.cos(dir) * step;
-          pts.push([px, py, dir]);
-        }
-        if (pts.length < 2) continue;
-        var sm = D.smooth(pts.map(function (p) { return [p[0], p[1]]; }), 6);
-        D.lw(2.2 * U); D.stroke(rgba(pal.accent, 0.34 * w.rot));
-        D.path(sm, false);
-        /* leaves / nodes at the joints */
-        for (var j = 1; j < pts.length; j++) {
-          var a = pts[j][2] || 0;
-          var side = (j % 2 ? 1 : -1);
-          D.fill(rgba(pal.hot, 0.30 * w.rot));
-          D.ctx().beginPath();
-          D.ctx().ellipse(pts[j][0], pts[j][1], 17 * U, 7 * U, a + side * 0.9, 0, TAU);
-          D.ctx().fill();
-          D.stroke(rgba(pal.accent, 0.4 * w.rot)); D.lw(1);
-          D.ctx().stroke();
-        }
-      }
-    },
-
-    /* 105-177 s : everything that was tidy has become a knot */
-    tangle: function (w, pal, t) {
-      var c = D.ctx();
-      var strands = 9;
-      for (var s = 0; s < strands; s++) {
-        var seed = s * 1313;
-        var pts = [];
-        var N = 64;
-        for (var i = 0; i <= N; i++) {
-          var u = i / N;
-          var ang = u * TAU * (1.4 + s * 0.22) + t * (0.35 + s * 0.05);
-          var rad = (110 + s * 26 + Math.sin(t * 0.7 + s) * 40 + u * 200) * U * lerp(1.0, 1.5, w.chaos);
-          var wob = (noise(s * 5.5 + u * 4, t * 0.5 + s) - 0.5) * 150 * U * w.chaos;
-          pts.push([
-            Math.cos(ang) * rad + wob,
-            Math.sin(ang * 0.83) * rad * 0.72 + wob * 0.6 + w.vert * H * 0.22
-          ]);
-        }
-        var sm = D.smooth(pts, 2);
-        D.lw(1.5); D.stroke(rgba(EM.World.mix(pal.accent, pal.hot, w.heat), 0.20 + 0.22 * Math.sin(s)));
-        D.path(sm, false);
-      }
-    },
-
-    /* 184-212 s : the rules are gone. Only a warm pulse remains.
-       Deliberately built from centre-outwards so the eye always has a
-       focal point: a breathing core, faint concentric orbits that keep the
-       frame from reading as a flat wash, and a horizon that never quite
-       resolves — the simulation still running, no longer obeyed. */
-    open: function (w, pal, t) {
-      var c = D.ctx();
-      var beat = Math.sin(t * 2.1) * 0.5 + 0.5;
-
-      /* a horizon line: the last surviving rule of the old world */
-      var hy = -40 * U + Math.sin(t * 0.21) * 26 * U;
-      var hg = c.createLinearGradient(-W * 0.5, hy, W * 0.5, hy);
-      hg.addColorStop(0, 'rgba(0,0,0,0)');
-      hg.addColorStop(0.5, rgba(pal.love, 0.10 + 0.05 * beat));
-      hg.addColorStop(1, 'rgba(0,0,0,0)');
-      D.lw(1.2); D.stroke(hg);
-      D.line(-W * 0.5, hy, W * 0.5, hy);
-
-      /* concentric orbits, slowly rotating the other way */
-      D.lw(1);
-      var orbits = 9;
-      for (var o = 0; o < orbits; o++) {
-        var phase = ((t * 0.055 + o / orbits) % 1);
-        var rr = (70 + phase * 900) * U * lerp(0.7, 1.05, w.love);
-        var al = (1 - phase) * (1 - phase) * 0.16 * (0.4 + 0.6 * w.love);
-        D.stroke(rgba(pal.love, al));
-        c.beginPath();
-        c.ellipse(0, hy * 0.4, rr, rr * 0.30, 0, 0, TAU);
-        c.stroke();
-      }
-
-      /* the breathing core — additive, so it reads as emitted light */
-      var R = (150 + beat * 60) * U * lerp(1, 1.35, w.love);
-      var g = c.createRadialGradient(0, 0, 0, 0, 0, R * 2.6);
-      g.addColorStop(0, rgba(pal.love, 0.34 * w.love + 0.06));
-      g.addColorStop(0.42, rgba(pal.accent, 0.09));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.save();
-      c.globalCompositeOperation = 'lighter';
-      D.fill(g);
-      D.circle(0, 0, R * 2.6); c.fill();
-      c.restore();
-
-      /* a defined core ring, so the eye has an edge to hold on to */
-      D.lw(1.6); D.stroke(rgba(pal.love, 0.30 + 0.14 * beat));
-      D.circle(0, 0, R * 0.52); c.stroke();
-      D.lw(1); D.stroke(rgba(pal.love, 0.16));
-      D.circle(0, 0, R * 0.70); c.stroke();
-
-      /* and a negative-space vignette so the glow never flattens the frame
-         into an even wash: the light stays light, everything else stays black */
-      var vg = c.createRadialGradient(0, 0, R * 0.9, 0, 0, Math.max(W, H) * 0.62);
-      vg.addColorStop(0, 'rgba(0,0,0,0)');
-      vg.addColorStop(0.55, 'rgba(0,0,0,0.34)');
-      vg.addColorStop(1, 'rgba(0,0,0,0.80)');
-      c.fillStyle = vg;
-      c.fillRect(-W / 2, -H / 2, W, H);
-
-      /* a few free-floating curves — hand-drawn, no longer parametric */
-      D.lw(2.0);
-      for (var i = 0; i < 5; i++) {
-        var sd = i * 313;
-        D.stroke(rgba(pal.love, 0.16 + 0.14 * Math.sin(t * 0.8 + i)));
-        var pts = [];
-        for (var k = 0; k <= 22; k++) {
-          var u = k / 22;
-          var a = u * TAU + t * (0.09 + i * 0.017) + sd;
-          var rr2 = (170 + i * 62) * U * (1 + (noise(sd + k * 0.3, t * 0.25) - 0.5) * 0.35);
-          pts.push([Math.cos(a) * rr2, Math.sin(a * 1.13) * rr2 * 0.55]);
-        }
-        D.path(D.smooth(pts, 3), false);
-      }
-
-      /* sparse warm particles drifting up through the light */
-      for (var m = 0; m < 60; m++) {
-        var s1 = hash(m * 8191 + 17), s2 = hash(m * 4421 + 5);
-        var yy = ((s2 * H * 1.3 - t * (7 + s1 * 13)) % (H * 1.3));
-        yy = yy < -H * 0.65 ? yy + H * 1.3 : yy;
-        var xx = (s1 - 0.5) * W * 1.1 + Math.sin(t * 0.4 + s2 * 9) * 26 * U;
-        D.ctx().fillStyle = rgba(pal.love, (0.07 + s2 * 0.20) * w.love);
-        D.ctx().beginPath();
-        D.ctx().arc(xx, yy, (0.8 + s1 * 2.2) * U, 0, TAU);
-        D.ctx().fill();
+      for (i = 1; i < H / sp; i++) {
+        var y = i * sp + (EM.h(71, i, (t * 2) | 0) - 0.5) * jit;
+        D.seg(0, y, W, y, i % 4 === 0 ? gm : EM.withA(gm, al * 0.4), i % 4 === 0 ? 1.1 : 0.7);
       }
     }
   };
 
-  /* ==========================================================================
-     4. AMBIENT PARTICLES
-        Deterministic drift; density and behaviour read from world state.
-     ======================================================================== */
-  function particles(w, pal, t) {
-    var c = D.ctx();
-    var n = Math.round(lerp(14, 190, w.density));
-    var mode = w.topo;
-    D.lw(1);
-    for (var i = 0; i < n; i++) {
-      var s1 = hash(i * 9176 + 13), s2 = hash(i * 3391 + 71), s3 = hash(i * 5527 + 29);
+  /* -------------------------------------------------------------- 拓扑场绘制 */
 
-      if (mode === 'tangle') {
-        /* orbiting debris in a collapsing system */
-        var ang = s1 * TAU + t * (0.16 + s2 * 0.5) * (1 + w.chaos);
-        var rad = (90 + s2 * 620) * U * lerp(1, 1.5, w.chaos);
-        var px = Math.cos(ang) * rad;
-        var py = Math.sin(ang * 1.07) * rad * 0.62 + w.vert * H * 0.2;
-        D.fill(rgba(s3 > 0.72 ? pal.hot : pal.accent, 0.14 + s3 * 0.5));
-        D.circle(px, py, (0.8 + s3 * 2.1) * U);
-        c.fill();
-      } else if (mode === 'organic') {
-        /* spores / pollen */
-        var yy = ((s2 * H * 1.3 - t * (14 + s1 * 26)) % (H * 1.3));
-        yy = yy < -H * 0.65 ? yy + H * 1.3 : yy;
-        var xx = (s1 - 0.5) * W * 1.1 + Math.sin(t * 0.6 + s3 * 9) * 22 * U;
-        D.fill(rgba(pal.hot, 0.16 + s3 * 0.4));
-        D.circle(xx, yy, (0.9 + s3 * 1.8) * U);
-        c.fill();
-      } else if (mode === 'open') {
-        /* slow embers rising out of a finished world */
-        var yy2 = ((s2 * H * 1.4 - t * (8 + s1 * 14)) % (H * 1.4));
-        yy2 = yy2 < -H * 0.7 ? yy2 + H * 1.4 : yy2;
-        var xx2 = (s1 - 0.5) * W * 1.15 + Math.sin(t * 0.35 + s3 * 7) * 34 * U;
-        D.fill(rgba(pal.love, 0.10 + s3 * 0.34));
-        D.circle(xx2, yy2, (0.7 + s3 * 2.0) * U);
-        c.fill();
-      } else {
-        /* falling data glyphs */
-        var col = Math.floor(s1 * 34);
-        var yy3 = ((s2 * H * 1.35 + t * (30 + s3 * 90)) % (H * 1.35)) - H * 0.67;
-        var xx3 = (col / 34 - 0.5) * W * 1.15;
-        var a = 0.10 + s3 * 0.30;
-        D.fill(rgba(pal.grid, a * (0.4 + w.density)));
-        D.frect(xx3, yy3, 1.6 * U, (8 + s3 * 30) * U);
+  WL.field = function (t, w) {
+    buildField(t, w);
+    var i, j, k;
+    var accent = w.accent;
+    // 注意：这两个必须是**数字**（透明度），不是颜色数组 ——
+    // 早先这里写成 EM.withA(...) 再拿去做乘法，alpha 全变成 NaN，
+    // 而浏览器遇到非法颜色会静默沿用上一个颜色，画面错了却不报错。
+    var linkA = 0.05 + 0.13 * (1 - w.struct) + 0.05 * w.chaos;
+    var nodeA = 0.30 + 0.45 * w.struct;
+    var maxLinks = 210 + Math.round(w.chaos * 190);
+    var links = 0;
+    var reach = 210 + w.chaos * 90;
+
+    for (i = 0; i < NN && links < maxLinks; i++) {
+      var nb = NBR[i];
+      for (k = 0; k < nb.length && links < maxLinks; k++) {
+        j = nb[k];
+        if (j < i) continue;
+        var dx = nx[i] - nx[j], dy = ny[i] - ny[j];
+        var d = Math.sqrt(dx * dx + dy * dy);
+        var lim = w.topo > 3 ? reach : 260;
+        if (d > lim) continue;
+        var a = linkA * (1 - d / lim) * (0.5 + 0.5 * nz[i] + 0.5);
+        D.seg(nx[i], ny[i], nx[j], ny[j], EM.withA(accent, a), 0.8 + w.struct * 0.9);
+        links++;
       }
     }
-  }
-
-  /* ==========================================================================
-     5. VERTICAL THREADS — the "power line" / umbilical. Present from 0 s,
-        pulled taut, then snapping during ISOLATION.
-     ======================================================================== */
-  function threads(w, pal, t) {
-    var c = D.ctx();
-    var n = 15;
-    var snap = clamp((t - 116.4) / 1.1, 0, 1);
-    for (var i = 0; i < n; i++) {
-      var s = hash(i * 7717 + 5);
-      var x = (i / (n - 1) - 0.5) * W * 0.86 + Math.sin(t * 0.4 + i) * 10 * U;
-      var live = 1 - snap * (s > 0.45 ? 1 : 0.3);
-      if (live <= 0.02) continue;
-      var amp = (4 + 26 * w.chaos) * U * live;
-      var pts = [];
-      for (var k = 0; k <= 14; k++) {
-        var u = k / 14;
-        pts.push([x + Math.sin(u * 5 + t * 1.2 + i) * amp, (u - 0.5) * H * 1.05]);
+    // 乱麻/开环阶段：再多连一些远距离的线，世界开始不讲道理
+    if (w.topo > 3.4) {
+      var extra = Math.round(90 * EM.clamp(w.topo - 3.4, 0, 2));
+      for (i = 0; i < extra; i++) {
+        var a1 = (EM.h(i, 5, (t * 0.5) | 0) * NN) | 0;
+        var a2 = (EM.h(i, 9, (t * 0.5) | 0) * NN) | 0;
+        D.seg(nx[a1], ny[a1], nx[a2], ny[a2], EM.withA(w.warm > 0.5 ? EM.PAL.warm : accent, 0.05 + 0.05 * w.chaos), 0.7);
       }
-      D.lw(1);
-      D.stroke(rgba(pal.grid, (0.06 + 0.11 * s) * live * (0.5 + w.density)));
-      D.path(D.smooth(pts, 4), false);
     }
-  }
+    // 节点
+    for (i = 0; i < NN; i++) {
+      var s = (1.4 + 1.9 * (0.5 + 0.5 * nz[i])) * (0.35 + 0.65 * w.struct) * (1 + 0.5 * EM.hit(t - EM.h(i, 3, 1) * 0.4, 0.12));
+      var col = w.warm > 0.45 && (i % 7 === 0) ? EM.withA(EM.PAL.warm, nodeA) : EM.withA(accent, nodeA);
+      D.circle(nx[i], ny[i], Math.max(0.6, s), col);
+    }
+    D.S.labels.fieldNodes = NN;
+  };
 
-  /* ==========================================================================
-     6. SHATTER SHARDS — geometry that has stopped obeying the rules.
-     ======================================================================== */
-  function shards(w, pal, t) {
-    if (w.shatter < 0.02) return;
-    var c = D.ctx();
-    var n = Math.round(w.shatter * 44);
-    D.lw(1);
+  /* ------------------------------------------------------------------ 音高尺 */
+
+  /** 画面左侧：把 EM.ONSETS 这张真实的音符表实时画出来。 */
+  WL.pitchRuler = function (t, w) {
+    var X0 = 62, X1 = 214, Y0 = 150, Y1 = 760;
+    var lo = EM.PITCH_LO - 1, hi = EM.PITCH_HI + 1, span = hi - lo;
+    function py(p) { return Y1 - (p - lo) / span * (Y1 - Y0); }
+    var accent = w.accent;
+    var dim = EM.withA(accent, 0.18);
+    D.seg(X1, Y0 - 14, X1, Y1 + 14, dim, 1);
+    var p;
+    for (p = lo; p <= hi; p++) {
+      var big = p % 12 === 0;
+      D.seg(X1 - (big ? 16 : 8), py(p), X1, py(p), big ? EM.withA(accent, 0.4) : EM.withA(accent, 0.16), big ? 1.4 : 1);
+    }
+    // 过去 6 秒的真实音符：从右往左退去
+    var win = 6;
+    var i0 = EM.indexAt(t - win), i1 = EM.indexAt(t);
+    if (i0 < 0) i0 = 0;
+    for (var i = i0; i <= i1; i++) {
+      var age = t - EM.t0[i];
+      if (age > win) continue;
+      var x = X1 - age / win * (X1 - X0);
+      var y = py(EM.pitch[i]);
+      var k = 1 - age / win;
+      D.seg(x - 9 - 12 * k, y, x + 4, y, EM.withA(accent, 0.10 + 0.55 * k * EM.accent[i]), 1.2 + 2.2 * k);
+      D.circle(x, y, 1.2 + 2.6 * k * EM.accent[i], EM.withA(accent, 0.25 + 0.6 * k));
+    }
+    // 当前音高：一条指向舞台的水平线
+    var cur = EM.pitchAt(t);
+    D.seg(X1, py(cur), X1 + 46 + 30 * EM.hit(t, 0.2), py(cur), EM.withA(accent, 0.5), 1.6);
+    D.mono(EM.PITCH_NAMES ? EM.PITCH_NAMES[cur] : ('MIDI ' + cur), X1 + 52, py(cur) - 8, 12, EM.withA(w.accent, 0.75));
+    D.mono('PITCH', X0, Y0 - 34, 11, EM.withA(accent, 0.55), { tracking: 2 });
+  };
+
+  /* ------------------------------------------------------ 脉冲环 / 裂缝 / 雨 */
+
+  WL.pulses = function (t, w) {
+    var rec = EM.recent(t, 1.15, 16), i;
+    for (i = 0; i < rec.length; i++) {
+      var r = rec[i], age = r.age;
+      var rad = 90 + age * 520;
+      var a = (1 - age / 1.15) * 0.20 * (0.4 + 0.6 * r.accent);
+      D.circle(CX, CY - 20, rad, EM.withA(w.accent, a), 1.2 + 2.4 * (1 - age / 1.15));
+    }
+    // 底部节奏刻度：真实音符的时间位置
+    var X0 = 380, X1 = 1520, Y = H - 46, win = 3.4;
+    for (i = 0; i < 40; i++) {
+      var tt = t - i * (win / 40);
+      if (tt < 0) break;
+      var hh = 4 + 16 * EM.hit(tt, 0.14);
+      var a2 = 0.05 + 0.28 * (1 - i / 40) * EM.hit(tt, 0.3);
+      D.seg(X0 + (i / 40) * (X1 - X0), Y, X0 + (i / 40) * (X1 - X0), Y + hh, EM.withA(w.accent, a2), 1.4);
+    }
+  };
+
+  WL.fracture = function (t, w) {
+    if (w.heat < 0.16) return;
+    var n = Math.round(w.heat * 13);
     for (var i = 0; i < n; i++) {
-      var s = hash(i * 8191 + 17);
-      var s2 = hash(i * 2731 + 91);
-      var ang = s * TAU + t * (0.1 + s2 * 0.3);
-      var rad = (60 + s2 * 560) * U * (0.4 + w.shatter);
-      var px = Math.cos(ang) * rad;
-      var py = Math.sin(ang * 1.2) * rad * 0.7;
-      D.fill(rgba(s > 0.6 ? pal.hot : pal.grid, 0.06 + w.shatter * 0.16));
-      D.stroke(rgba(pal.accent, 0.10 + w.shatter * 0.22));
-      D.shard(s, px, py, (10 + s2 * 46) * U * w.shatter, ang, 0.5 + w.shatter * 0.4);
-    }
-  }
-
-  /* ==========================================================================
-     7. VIGNETTE + ALARM WASH
-     ======================================================================== */
-  function vignette(w, pal) {
-    var c = D.ctx();
-    if (w.heat > 0.05) {
-      c.save();
-      c.globalCompositeOperation = 'lighter';
-      c.globalAlpha = w.heat * 0.16 * (0.7 + 0.3 * Math.sin(w.time * 6));
-      c.fillStyle = rgba(pal.hot, 1);
-      c.fillRect(-W / 2, -H / 2, W, H);
-      c.restore();
-    }
-    var g = c.createRadialGradient(0, 0, H * 0.28, 0, 0, Math.max(W, H) * 0.72);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(0.75, 'rgba(0,0,0,0.30)');
-    g.addColorStop(1, 'rgba(0,0,0,0.72)');
-    c.fillStyle = g;
-    c.fillRect(-W / 2, -H / 2, W, H);
-  }
-
-  /* ==========================================================================
-     MAIN DRAW
-     ======================================================================== */
-  function draw(w, pal, t, dim) {
-    var c = D.ctx();
-    bg(w, pal, w, t);
-    gridField(w, pal, t);
-
-    /* pick the topology, cross-fading during the seams so the world morphs */
-    var shape = SHAPES[w.topo] || SHAPES.grid;
-    c.save();
-    c.translate(0, w.vert * -H * 0.02);
-    c.rotate(w.tilt * Math.PI / 180);
-    var zoom = lerp(1, w.scale, 0.5);
-    c.scale(zoom, zoom);
-    c.globalAlpha = 1;
-    if (w.shatter > 0.01) {
-      c.translate((hash(Math.floor(t * 9) * 31) - 0.5) * w.shatter * 16 * U,
-                  (hash(Math.floor(t * 9) * 61) - 0.5) * w.shatter * 16 * U);
-    }
-    threads(w, pal, t);
-    shape(w, pal, t);
-    c.restore();
-
-    shards(w, pal, t);
-    particles(w, pal, t);
-    if (w.love > 0.28) loveGlyphs(w, pal, t);
-    vignette(w, pal);
-  }
-
-  /* ==========================================================================
-     8. LOVE GLYPHS — the thing the machine was never supposed to compute.
-        Heart curves drawn as parametric plot points, drifting up.
-     ======================================================================== */
-  function loveGlyphs(w, pal, t) {
-    var c = D.ctx();
-    var n = Math.round(lerp(0, 26, (w.love - 0.28) / 0.72));
-    for (var i = 0; i < n; i++) {
-      var s1 = hash(i * 4421 + 3), s2 = hash(i * 9967 + 41);
-      var yy = ((s2 * H * 1.4 - t * (16 + s1 * 30)) % (H * 1.4));
-      yy = yy < -H * 0.7 ? yy + H * 1.4 : yy;
-      var xx = (s1 - 0.5) * W * 1.1 + Math.sin(t * 0.5 + s2 * 12) * 40 * U;
-      var sc = (7 + s2 * 16) * U;
-      var al = (0.06 + s1 * 0.30) * clamp((w.love - 0.28) / 0.5, 0, 1);
-      D.stroke(rgba(pal.love, al));
-      D.lw(1.4);
-      c.beginPath();
-      for (var k = 0; k <= 26; k++) {
-        var a = k / 26 * TAU;
-        var hx = 16 * Math.pow(Math.sin(a), 3);
-        var hy = -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a));
-        var px = xx + hx / 16 * sc;
-        var py = yy + hy / 16 * sc;
-        if (k === 0) c.moveTo(px, py); else c.lineTo(px, py);
+      var seed = i * 37;
+      var side = (EM.h(i, 1, 0) * 4) | 0;
+      var x, y, dx, dy;
+      if (side === 0) { x = EM.h(i, 2, 0) * W; y = 0; dx = 0.4; dy = 1; }
+      else if (side === 1) { x = EM.h(i, 2, 0) * W; y = H; dx = 0.4; dy = -1; }
+      else if (side === 2) { x = 0; y = EM.h(i, 2, 0) * H; dx = 1; dy = 0.4; }
+      else { x = W; y = EM.h(i, 2, 0) * H; dx = -1; dy = 0.4; }
+      var pts = [[x, y]], len = 40 + EM.h(i, 4, 0) * 120;
+      for (var k = 0; k < 7; k++) {
+        var step = len * (0.5 + EM.h(i, k, 3) * 0.7);
+        x += dx * step + (EM.h(i, k, 5) - 0.5) * 90;
+        y += dy * step + (EM.h(i, k, 6) - 0.5) * 90;
+        pts.push([x, y]);
       }
-      c.stroke();
+      D.line(pts, EM.withA(i % 3 === 0 ? EM.PAL.heat : w.accent, 0.10 + 0.34 * w.heat), 1 + w.heat * 2.4);
     }
+  };
+
+  WL.rain = function (t, w) {
+    if (w.chaos < 0.32) return;
+    var n = Math.round((w.chaos - 0.32) * 70);
+    for (var i = 0; i < n; i++) {
+      var col = (EM.h(i, 11, 0) * 22) | 0;
+      var x = 240 + col * 60;
+      var speed = 90 + EM.h(i, 12, 0) * 210;
+      var y = ((t * speed + EM.h(i, 13, 0) * 2000) % (H + 220)) - 110;
+      var len = 22 + EM.h(i, 14, 0) * 70;
+      var a = 0.04 + 0.12 * w.chaos;
+      if (y < -len || y > H) continue;                 // 完全在画外的字符雨不必画
+      D.seg(x, y, x, y + len, EM.withA(w.accent, a), 1);
+      if (y + len < H - 6 && EM.h(i, 15, (t * 3) | 0) > 0.86) {
+        D.mono(String.fromCharCode(48 + ((EM.h(i, 16, (t | 0)) * 10) | 0)), x - 5, y + len, 11, EM.withA(w.accent, a * 2.4));
+      }
+    }
+  };
+
+  /* ------------------------------------------------------------------ 前景 */
+
+  /* ------------------------------------------------- MV：闪白 / 硬切 / 噪声
+   * 参考 MV 里 7.4% 的帧是**整屏纯白**，中位亮度只有 12/255，切点 139 个。
+   * 这一层不做解释，只把它的明暗结构照搬过来：MV 白我就白，MV 黑我就黑。
+   */
+  WL.mv = function (t, w) {
+    if (!w.mvOn || !w.mv) return;
+    var mv = w.mv, ctx = D.ctx;
+    // 整屏闪白（亮度包络直接当遮罩用）
+    if (mv.lum > 0.30) {
+      var a = EM.smooth(EM.inv(0.30, 0.85, mv.lum));
+      ctx.fillStyle = EM.css([255, 255, 255, a]);
+      ctx.fillRect(0, 0, W, H); D.S.calls++;
+    }
+    // 硬切：剪辑点后 2 帧压一次黑，模拟它的硬切感
+    if (mv.sinceCut < 0.07) {
+      ctx.fillStyle = EM.css([0, 0, 0, 0.55 * (1 - mv.sinceCut / 0.07)]);
+      ctx.fillRect(0, 0, W, H); D.S.calls++;
+    }
+    // 噪声颗粒：密度跟着 MV 的标准差走
+    var n = Math.round(60 + mv.sd * 900);
+    for (var i = 0; i < n; i++) {
+      var x = EM.h(i, 41, (t * 60) | 0) * W, y = EM.h(i, 42, (t * 60) | 0) * H;
+      var v = EM.h(i, 43, (t * 60) | 0);
+      D.rect(x, y, 1 + v * 2.6, 1 + v * 1.4, EM.withA([255, 255, 255], 0.05 + 0.20 * v * mv.sd * 3));
+    }
+    D.S.labels.mvGrain = n;
+  };
+
+  /* ------------------------------------- MV 的内容层（用我的画面风格呈现）
+   * 参考 MV 是一台"假操作系统的终端"：歌词被当成命令/状态消息敲出来。
+   * 这里把 _tools 用 OCR 从它屏幕上读到的原文照样打出来 ——
+   * 但用的是本片的语言：细青线、等宽字、角标、光标，不是它的纯灰闪白。
+   */
+  WL.mvText = function (t, w) {
+    var MV = WX.MV;
+    if (!MV || !MV.textAt) return;
+    var cur = MV.textAt(t);
+    if (!cur) return;
+    // MV 的终端是"越打越长"的：把最近几条一起留在屏幕上，最新的那条正在打
+    var log = [];
+    for (var i = 0; i < MV.TEXT.length; i++) {
+      var e = MV.TEXT[i];
+      if (e[0] <= t - 0.02 && t - e[0] < 6.5) log.push(e);
+    }
+    log = log.slice(-3);
+    if (!log.length) return;
+    var accent = w.accent;
+    var seed = Math.round(log[0][0] * 7);
+    var right = EM.h(seed, 71, 0) > 0.5;
+    var px = right ? 880 + EM.h(seed, 72, 0) * 110 : 250;
+    var py = right ? 92 + EM.h(seed, 73, 0) * 36 : 600 + EM.h(seed, 74, 0) * 56;
+    var rows = [];
+    var newest = log[log.length - 1];
+    for (var k = 0; k < log.length; k++) {
+      var lns = wrap(log[k][1], 52);
+      for (var q = 0; q < lns.length && rows.length < 5; q++) {
+        rows.push({ s: lns[q], last: (k === log.length - 1) && q === lns.length - 1, age: t - log[k][0] });
+      }
+    }
+    var pw = 470, ph = 46 + rows.length * 24;
+    var appear = EM.smooth(EM.clamp((t - newest[0]) / 0.15, 0, 1));
+    var fade = 1 - EM.smooth(EM.clamp((cur.age - 5.0) / 1.5, 0, 1));
+    D.save();
+    D.am(appear * fade);
+    M.panel(px, py, pw, ph, 'mv.terminal', accent, { a: 0.9 });
+    var revealed = EM.clamp((t - newest[0]) / 1.4, 0, 1);
+    for (var r2 = 0; r2 < rows.length; r2++) {
+      var row = rows[r2];
+      var txt = row.s;
+      if (row.last) txt = row.s.slice(0, Math.max(1, Math.round(row.s.length * revealed)));
+      var a = row.age < 0.9 ? 0.95 : 0.45;              // 更旧的行淡一些
+      D.mono(txt, px + 14, py + 44 + r2 * 24, 16, EM.withA(accent, a));
+    }
+    var lastRow = rows[rows.length - 1];
+    if (revealed < 1) {
+      M.caret(px + 14 + D.measure(lastRow.s.slice(0, Math.max(1, Math.round(lastRow.s.length * revealed))), 16, true),
+        py + 44 + (rows.length - 1) * 24, 16, EM.withA(accent, 0.9), t);
+    }
+    D.restore();
+  };
+
+  function wrap(s, n) {
+    var out = [], cur = '';
+    for (var i = 0; i < s.length; i++) {
+      cur += s[i];
+      if (cur.length >= n) { out.push(cur); cur = ''; }
+    }
+    if (cur) out.push(cur);
+    return out.slice(0, 3);
   }
 
-  EM.WorldLayer = { draw: draw, frame: frame, SHAPES: SHAPES };
-})(window.EM);
+  /** MV 的剪辑脉冲：它整屏闪白/硬切的地方，我这边给一下本片风格的冲击。
+   *  不改成灰白屏 —— 保留本片的配色与线条，只借它的节奏。 */
+  WL.mvBeat = function (t, w) {
+    var MV = WX.MV;
+    if (!MV || !MV.ON === 'never') return;
+    if (!MV.STRUCT) return;
+    var mv = w.mv;
+    if (!mv) return;
+    var accent = w.accent;
+    // 闪白时刻：短促的整屏加光 + 一道横扫
+    if (mv.lum > 0.45) {
+      var k = EM.smooth(EM.inv(0.45, 0.95, mv.lum));
+      D.ctx.fillStyle = EM.css(EM.withA([255, 255, 255], 0.05 + 0.16 * k));
+      D.ctx.fillRect(0, 0, W, H); D.S.calls++;
+      D.seg(0, H * 0.5 - 40 * k, W, H * 0.5 + 40 * k, EM.withA(accent, 0.20 * k), 2 + 6 * k);
+    }
+    // 硬切：切点后 120 ms 内的横向错位条
+    if (mv.sinceCut < 0.12) {
+      var s0 = 1 - mv.sinceCut / 0.12;
+      for (var i = 0; i < 5; i++) {
+        var y = EM.h(i, 81, Math.round(mv.cut * 30)) * H;
+        D.rect(0, y, W, 2 + 8 * s0, EM.withA(accent, 0.05 + 0.14 * s0));
+      }
+    }
+  };
+
+  WL.hud = function (t, w, info) {
+    var accent = w.accent;
+    var pad = 34;
+    D.bracket(pad, pad, W - pad * 2, H - pad * 2, 26, EM.withA(accent, 0.18), 1.2);
+    // 顶部：整首歌的进度 + 131 条歌词刻度
+    var X0 = pad + 10, X1 = W - pad - 10, Y = pad + 16;
+    D.seg(X0, Y, X1, Y, EM.withA(accent, 0.18), 1.2);
+    var C = WX.CUES, i;
+    for (i = 0; i < C.length; i++) {
+      var px = X0 + (C[i].t / EM.AUDIO_END) * (X1 - X0);
+      var big = C[i].text && C[i].text === C[i].text.toUpperCase() && C[i].text.length > 2;
+      D.seg(px, Y - (big ? 7 : 3), px, Y + (big ? 7 : 3), EM.withA(accent, big ? 0.5 : 0.22), big ? 1.4 : 0.9);
+    }
+    var ph = X0 + (t / EM.AUDIO_END) * (X1 - X0);
+    D.seg(ph, Y - 12, ph, Y + 12, EM.withA(w.accent, 0.85), 2);
+    D.circle(ph, Y, 3.4, EM.withA([255, 255, 255], 0.8));
+
+    // 底部：615 个真实音符的轮廓线（整首歌的形状）
+    var BX0 = 380, BX1 = W - 60, BY = H - 78, BH = 44;
+    D.seg(BX0, BY + BH, BX1, BY + BH, EM.withA(accent, 0.20), 1);
+    for (i = 0; i < EM.N; i += 2) {
+      var x = BX0 + (EM.t0[i] / EM.AUDIO_END) * (BX1 - BX0);
+      var u = (EM.pitch[i] - EM.PITCH_LO) / Math.max(1, EM.PITCH_HI - EM.PITCH_LO);
+      var y = BY + (1 - u) * BH;
+      D.seg(x, BY + BH, x, y, EM.withA(accent, 0.06 + 0.16 * EM.accent[i]), 0.8);
+    }
+    D.seg(ph, BY - 4, ph, BY + BH + 4, EM.withA([255, 255, 255], 0.45), 1);
+
+    // 左下角：机器自报家门
+    D.mono('world.execute(me);', 62, H - 70, 13, EM.withA(accent, 0.5), { tracking: 1 });
+    D.mono('t = audio.currentTime  ·  ' + t.toFixed(3) + ' / ' + EM.AUDIO_END.toFixed(3) + ' s', 62, H - 50, 12, EM.withA(accent, 0.34));
+    if (info) {
+      D.mono(info, 62, H - 30, 12, EM.withA(accent, 0.28));
+    }
+    D.mono((w.mvOn ? 'MV REF  ·  ' : '') + '130 BPM · 615 notes · ' + C.length + ' cues', W - 60, H - 50, 12, EM.withA(accent, 0.32), { align: 'right' });
+    D.mono(WORLD_TIME(t), W - 60, H - 30, 12, EM.withA(accent, 0.32), { align: 'right' });
+  };
+
+  function WORLD_TIME(t) {
+    var m = Math.floor(t / 60), s = t - m * 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s.toFixed(2);
+  }
+  WL.timecode = WORLD_TIME;
+
+  /** 在画板**下面**画。 */
+  WL.under = function (t, w) {
+    if (WX.GAUGE && WX.GAUGE.backdrop) WX.GAUGE.backdrop(t);   // 仪表盘那一段的深蓝底
+    WL.backdrop(t, w);
+    WL.field(t, w);
+    WL.rain(t, w);
+    WL.pulses(t, w);
+    WL.fracture(t, w);
+    WL.pitchRuler(t, w);
+  };
+
+  /** 在画板**上面**画（HUD 与少量前景颗粒）。 */
+  WL.over = function (t, w, info) {
+    WL.mv(t, w);          // 只有 MV 模式（M 键）才会压成纯灰 + 闪白
+    WL.mvBeat(t, w);      // 参考 MV 的剪辑节奏（保持本片配色）
+    WL.mvText(t, w);      // 参考 MV 屏幕上真实出现过的文字
+    if (WX.GAUGE && WX.GAUGE.updateImages) WX.GAUGE.updateImages(t);   // To F, to M 的两张透明 PNG
+    // 少许浮尘，让"显示器"有实体感
+    var n = 26;
+    for (var i = 0; i < n; i++) {
+      var x = ((EM.h(i, 21, 0) * W + t * (6 + EM.h(i, 22, 0) * 22)) % W);
+      var y = (EM.h(i, 23, 0) * H + t * (3 + EM.h(i, 24, 0) * 11)) % H;
+      D.circle(x, y, 0.6 + EM.h(i, 25, 0) * 1.5, EM.withA(w.accent, 0.05 + 0.10 * EM.h(i, 26, (t | 0))));
+    }
+    WL.hud(t, w, info);
+  };
+
+})(typeof window !== 'undefined' ? window : globalThis);

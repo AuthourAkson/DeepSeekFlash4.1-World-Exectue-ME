@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" role="img" aria-label="Switch my gender title">
+  <title>Switch my gender title</title>
+  
+      <rect width="1200" height="260" fill="#11164A"/>
+      <g transform="translate(150 130) scale(0.9)">
+        
+<g id="gender-symbol" fill="none" stroke="#F4F4F4" stroke-width="8"
+   stroke-linecap="round" stroke-linejoin="round">
+  <!-- main circle -->
+  <circle cx="0" cy="0" r="58"/>
+  <!-- female arm + cross, lower-left -->
+  <path d="M -41,41 L -92,92"/>
+  <path d="M -92,92 L -72,112 M -92,92 L -112,72"/>
+  <!-- male arm -->
+  <path d="M 41,-41 L 93,-93"/>
+  <!-- male arrow head -->
+  <path d="M 67,-93 L 93,-93 L 93,-67"/>
+</g>
+
+      </g>
+      <text x="600" y="145" text-anchor="middle"
+            font-family="Arial, Helvetica, sans-serif"
+            font-size="34" font-weight="300" letter-spacing="15"
+            fill="#7C7FA3">SWITCH MY GENDER</text>
+      <g transform="translate(1050 130) scale(0.9)">
+        
+<g id="gender-symbol" fill="none" stroke="#F4F4F4" stroke-width="8"
+   stroke-linecap="round" stroke-linejoin="round">
+  <!-- main circle -->
+  <circle cx="0" cy="0" r="58"/>
+  <!-- female arm + cross, lower-left -->
+  <path d="M -41,41 L -92,92"/>
+  <path d="M -92,92 L -72,112 M -92,92 L -112,72"/>
+  <!-- male arm -->
+  <path d="M 41,-41 L 93,-93"/>
+  <!-- male arrow head -->
+  <path d="M 67,-93 L 93,-93 L 93,-67"/>
+</g>
+
+      </g>
+    
+</svg>

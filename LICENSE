@@ -1,0 +1,36 @@
+MIT License
+
+Copyright (c) 2026 Zhengyi Shen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---------------------------------------------------------------------------
+
+NOTE ON THIRD-PARTY CONTENT
+
+The licence above covers the original work in this repository: the animation,
+the rendering engine, the timeline and scene data derived from the provided
+files, and the verification tooling.
+
+It does NOT cover the music, the MIDI file or the lyric timeline, which remain
+the property of Mili. Those files are included so that the piece can be run by
+double-clicking index.html, and are not relicensed here. See ATTRIBUTION.md.
+
+This work is an independent visual interpretation. It is not an official PV
+and has no affiliation with Mili.

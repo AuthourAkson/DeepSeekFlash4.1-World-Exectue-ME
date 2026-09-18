@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-label="Gauge 0% state">
+  <title>Gauge 0% state</title>
+  
+<rect width="900" height="900" fill="#11164A"/>
+<g id="gauge">
+  <circle cx="450" cy="450" r="335" fill="none" stroke="#F4F4F4" stroke-width="5"/>
+  <circle cx="450" cy="450" r="305" fill="none" stroke="#575B86" stroke-width="2"/>
+  <g id="ticks"><line x1="450.00" y1="168.00" x2="450.00" y2="146.00" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="479.97" y1="169.60" x2="482.31" y2="147.72" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="509.61" y1="174.37" x2="514.26" y2="152.87" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="538.57" y1="182.27" x2="545.48" y2="161.38" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="566.53" y1="193.20" x2="575.62" y2="173.17" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="593.16" y1="207.04" x2="604.33" y2="188.09" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="618.18" y1="223.64" x2="631.30" y2="205.98" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="641.28" y1="242.79" x2="656.21" y2="226.63" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="662.22" y1="264.30" x2="678.78" y2="249.81" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="680.76" y1="287.91" x2="698.76" y2="275.26" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="696.68" y1="313.36" x2="715.93" y2="302.70" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="709.81" y1="340.35" x2="730.08" y2="331.80" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="719.99" y1="368.59" x2="741.06" y2="362.24" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="727.12" y1="397.75" x2="748.74" y2="393.67" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="731.10" y1="427.50" x2="753.03" y2="425.75" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="731.90" y1="457.51" x2="753.89" y2="458.09" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="729.51" y1="487.43" x2="751.31" y2="490.35" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="723.94" y1="516.93" x2="745.31" y2="522.15" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="715.28" y1="545.67" x2="735.97" y2="553.13" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="703.61" y1="573.32" x2="723.39" y2="582.94" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="689.06" y1="599.58" x2="707.71" y2="611.25" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="671.81" y1="624.14" x2="689.11" y2="637.73" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="652.04" y1="646.73" x2="667.80" y2="662.08" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="629.98" y1="667.09" x2="644.03" y2="684.03" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="605.89" y1="684.99" x2="618.05" y2="703.33" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="580.03" y1="700.23" x2="590.17" y2="719.76" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="552.69" y1="712.64" x2="560.70" y2="733.13" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="524.19" y1="722.06" x2="529.98" y2="743.29" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="494.86" y1="728.41" x2="498.36" y2="750.13" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="465.01" y1="731.60" x2="466.18" y2="753.57" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="434.99" y1="731.60" x2="433.82" y2="753.57" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="405.14" y1="728.41" x2="401.64" y2="750.13" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="375.81" y1="722.06" x2="370.02" y2="743.29" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="347.31" y1="712.64" x2="339.30" y2="733.13" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="319.97" y1="700.23" x2="309.83" y2="719.76" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="294.11" y1="684.99" x2="281.95" y2="703.33" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="270.02" y1="667.09" x2="255.97" y2="684.03" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="247.96" y1="646.73" x2="232.20" y2="662.08" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="228.19" y1="624.14" x2="210.89" y2="637.73" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="210.94" y1="599.58" x2="192.29" y2="611.25" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="196.39" y1="573.32" x2="176.61" y2="582.94" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="184.72" y1="545.67" x2="164.03" y2="553.13" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="176.06" y1="516.93" x2="154.69" y2="522.15" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="170.49" y1="487.43" x2="148.69" y2="490.35" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="168.10" y1="457.51" x2="146.11" y2="458.09" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="168.90" y1="427.50" x2="146.97" y2="425.75" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="172.88" y1="397.75" x2="151.26" y2="393.67" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="180.01" y1="368.59" x2="158.94" y2="362.24" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="190.19" y1="340.35" x2="169.92" y2="331.80" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="203.32" y1="313.36" x2="184.07" y2="302.70" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="219.24" y1="287.91" x2="201.24" y2="275.26" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="237.78" y1="264.30" x2="221.22" y2="249.81" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="258.72" y1="242.79" x2="243.79" y2="226.63" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="281.82" y1="223.64" x2="268.70" y2="205.98" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="306.84" y1="207.04" x2="295.67" y2="188.09" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="333.47" y1="193.20" x2="324.38" y2="173.17" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="361.43" y1="182.27" x2="354.52" y2="161.38" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="390.39" y1="174.37" x2="385.74" y2="152.87" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="420.03" y1="169.60" x2="417.69" y2="147.72" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/>
+<line x1="450.00" y1="168.00" x2="450.00" y2="146.00" stroke="#7C7FA3" stroke-width="3" stroke-linecap="round"/></g>
+  <circle cx="450" cy="450" r="145" fill="none" stroke="#575B86" stroke-width="2"/>
+  <g transform="translate(450 450)">
+    
+<g id="gender-symbol" fill="none" stroke="#F4F4F4" stroke-width="8"
+   stroke-linecap="round" stroke-linejoin="round">
+  <!-- main circle -->
+  <circle cx="0" cy="0" r="58"/>
+  <!-- female arm + cross, lower-left -->
+  <path d="M -41,41 L -92,92"/>
+  <path d="M -92,92 L -72,112 M -92,92 L -112,72"/>
+  <!-- male arm -->
+  <path d="M 41,-41 L 93,-93"/>
+  <!-- male arrow head -->
+  <path d="M 67,-93 L 93,-93 L 93,-67"/>
+</g>
+
+  </g>
+</g>
+
+      <g id="needle" transform="translate(450 450)">
+        <path d="M -6.00,0.00 L 6.00,-0.00
+                 L 0.00,-205.00
+                 L 27.00,-171.00
+                 L -27.00,-171.00 Z"
+              fill="#F4F4F4" stroke="none"/>
+        <circle cx="0" cy="0" r="8" fill="#11164A" stroke="#F4F4F4" stroke-width="4"/>
+      </g>
+    
+      <text x="450" y="465" text-anchor="middle"
+            font-family="Arial, Helvetica, sans-serif"
+            font-size="30" fill="#575B86">0%</text>
+    
+</svg>

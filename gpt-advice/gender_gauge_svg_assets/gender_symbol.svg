@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-140 -140 280 280" role="img" aria-label="Combined male female gender symbol">
+  <title>Combined male female gender symbol</title>
+  
+      <rect x="-140" y="-140" width="280" height="280" fill="#11164A"/>
+      
+<g id="gender-symbol" fill="none" stroke="#F4F4F4" stroke-width="8"
+   stroke-linecap="round" stroke-linejoin="round">
+  <!-- main circle -->
+  <circle cx="0" cy="0" r="58"/>
+  <!-- female arm + cross, lower-left -->
+  <path d="M -41,41 L -92,92"/>
+  <path d="M -92,92 L -72,112 M -92,92 L -112,72"/>
+  <!-- male arm -->
+  <path d="M 41,-41 L 93,-93"/>
+  <!-- male arrow head -->
+  <path d="M 67,-93 L 93,-93 L 93,-67"/>
+</g>
+
+    
+</svg>

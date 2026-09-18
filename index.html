@@ -2,117 +2,50 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>world.execute(me); — a realtime interpretation</title>
-<!--
-  ============================================================================
-  world.execute(me);  —  an animation built entirely from audio.currentTime
-  ============================================================================
-  Open this file directly (double-click). No server, no build, no network.
-  The song is read from "Mili - world.execute (me) ;.mp3" next to this file.
-  Nothing is fetched from the internet, and no lyrics service is involved:
-  the timeline lives in this file and in src/20_lyrics.js.
-
-  Keys:   space play/pause   ← → seek 5s   shift+← → seek 1s
-          , . nudge sync -/+10 ms   (shift = 1 ms)   / reset sync
-          r restart   f fullscreen   h hide UI   d debug overlay
-          ↑ ↓ volume   Home/End jump to start/end
-  ============================================================================
--->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>world.execute(me); — 一部把 audio.currentTime 当唯一时间基准的网页动画</title>
+<meta name="description" content="用 Mili 的《world.execute(me);》音频、MIDI 与 LRC 做的实时网页动画：131 块画板，逐句对应，全部由 audio.currentTime 驱动。">
 <link rel="stylesheet" href="src/style.css">
 </head>
 <body>
 
-<div id="shell">
+<div id="stagewrap"><canvas id="stage" width="1600" height="900"></canvas></div>
 
-  <!-- the whole film is drawn here -->
-  <div id="stage">
-    <canvas id="view" width="1600" height="900"></canvas>
-    <video id="video" playsinline preload="auto" muted></video>
-    <!-- NOTE: no crossorigin attribute. Under file:// every file is an opaque
-         origin, so a CORS-mode media request can never succeed — Chrome then
-         fails the load with MEDIA_ERR_SRC_NOT_SUPPORTED (code 4). Nothing here
-         needs CORS: the film never reads media pixels back. -->
-    <audio id="audio" preload="auto"></audio>
-    <div id="boot-msg">loading the song…</div>    <div id="start-hint">
-      <span class="ring"></span>
-      <span class="txt">click anywhere to begin</span>
-      <span class="sub">space play / pause &nbsp;·&nbsp; ← → seek &nbsp;·&nbsp; , . sync &nbsp;·&nbsp; f fullscreen &nbsp;·&nbsp; d debug</span>
-    </div>
-    <div id="toast"></div>
+<div id="bar">
+  <button id="play" title="播放 / 暂停（空格）">▶</button>
+  <button id="replay" title="重播（R）">↺</button>
+  <span id="time">00:00.00 / 03:31.98</span>
+  <div id="seekwrap">
+    <div id="ticks"></div>
+    <input type="range" id="seek" min="0" max="211984" step="10" value="0" title="进度（131 条歌词刻度）">
+    <div id="playhead"></div>
   </div>
-
-  <!-- UI ------------------------------------------------------------------ -->
-  <header id="hud-top">
-    <div class="brand">
-      <span class="sig">world.execute(me);</span>
-      <span class="sep">/</span>
-      <span class="sub">Mili &middot; Miracle Milk</span>
-    </div>
-    <div class="right">
-      <span id="state" data-s="READY">READY</span>
-      <span class="sep">/</span>
-      <span id="clock" class="mono">0:00.000</span>
-    </div>
-  </header>
-
-  <div id="panel">
-    <div id="lyric-meta">line 1 / 95</div>
-    <div id="lyric-line" class="typing">(pre-roll)</div>
-    <div id="lyric-next-wrap"><span class="lbl">next</span><span id="lyric-next">—</span></div>
-  </div>
-
-  <footer id="ctrl" class="ctrl">
-    <div id="wave" class="ctrl" role="slider" aria-label="seek" tabindex="0">
-      <div id="wave-buf"></div>
-      <div id="wave-fill"></div>
-      <div id="marks"></div>
-      <div id="wave-head"></div>
-    </div>
-
-    <div class="row">
-      <div class="grp">
-        <button id="btn-play" class="btn icon" aria-label="Play">
-          <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l12 7-12 7z"/></svg>
-          <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
-        </button>
-        <button id="btn-replay" class="btn icon" aria-label="Replay from start">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
-        </button>
-        <div class="time mono"><span id="t-cur">0:00.000</span><span class="slash">/</span><span id="t-tot">3:31.984</span></div>
-      </div>
-
-      <div class="grp grow">
-        <label class="lbl" for="vol">volume</label>
-        <input id="vol" class="range" type="range" min="0" max="1" step="0.01" value="0.85" aria-label="volume">
-        <span id="vol-val" class="mono"></span>
-      </div>
-
-      <div class="grp grow">
-        <label class="lbl" for="offset">sync offset</label>
-        <input id="offset" class="range" type="range" min="-2000" max="2000" step="1" value="0" aria-label="sync offset in milliseconds">
-        <span id="off-val" class="mono">+0 ms</span>
-        <button id="off-reset" class="btn tiny" title="reset offset (/)">0</button>
-      </div>
-
-      <div class="grp">
-        <button id="btn-full" class="btn icon" aria-label="Fullscreen">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5v2H6v3zM15 4h5v5h-2V6h-3zM4 15h2v3h3v2H4zM18 15h2v5h-5v-2h3z"/></svg>
-        </button>
-      </div>
-    </div>
-  </footer>
-
-  <div id="toast-host"></div>
+  <label class="grp" title="音量（↑ / ↓）">VOL<input type="range" id="vol" min="0" max="100" step="1" value="85"></label>
+  <label class="grp" title="毫秒级同步偏移（, / . 键，Shift 为 ±1 ms；/ 归零）">SYNC<input type="range" id="off" min="-2000" max="2000" step="1" value="0"><b id="offlabel">+0 ms</b></label>
+  <button id="offreset" title="偏移归零（/）">0</button>
+  <button id="fs" title="全屏（F）">⛶</button>
+  <button id="hide" title="隐藏界面（H）">▽</button>
+  <button id="dbg" title="调试叠层（D）">D</button>
+  <button id="mv" class="on" title="参考 MV 的纯灰视觉 / 作者原创配色（M）">MV</button>
 </div>
 
-<!-- ==========================================================================
-     LYRICS + TIMELINE, embedded. Nothing is fetched at runtime.
-     This block is byte-identical to the supplied
-     world.execute(me)-timeline.lrc and is what the runtime parses: if the two
-     ever disagree, the project's self-test reports it.
-     ========================================================================== -->
-<script id="lrc-source" type="text/plain">[ar:Mili]
+<div id="status" class="status">初始化…</div>
+<div id="stats"></div>
+<div id="banner" style="display:none"></div>
+<div id="debug" style="display:none"></div>
+
+<div id="start">
+  <div class="big">▶</div>
+  <div>点击任意处开始 · 空格 = 播放 / 暂停</div>
+  <div class="dim">t = audio.currentTime + syncOffset　·　131 块画板　·　615 个音符</div>
+</div>
+
+<!-- ========================================================================
+     内嵌歌词时间轴（逐字节来自 original/world.execute(me)-timeline.lrc）
+     运行时绝不联网取歌词；src/50_lrc.js 会把这份和成片时间轴逐条比对。
+     ===================================================================== -->
+<script id="lrc-source" type="text/plain">
+[ar:Mili]
 [ti:world.execute(me);]
 [al:Miracle Milk]
 [length:03:31.984]
@@ -253,16 +186,22 @@
 [03:31.984]
 </script>
 
-<!-- engine (classic scripts, ordered; no modules, so file:// works) -->
 <script src="src/00_core.js"></script>
+<script src="src/05_mv.js"></script>
+<script src="src/06_mv-text.js"></script>
+<script src="src/07_gauge.js"></script>
+<script src="src/08_vectors.js"></script>
 <script src="src/10_draw.js"></script>
+<script src="src/09_photos.js"></script>
+<script src="src/12_svg.js"></script>
 <script src="src/15_sceneapi.js"></script>
 <script src="src/01_world.js"></script>
 <script src="src/20_lyrics.js"></script>
 <script src="src/30_world_layer.js"></script>
-<script src="src/40_scenes.js"></script>
-<script src="src/41_scenes2.js"></script>
-<script src="src/42_scenes3.js"></script>
+<script src="src/40_scenes_a.js"></script>
+<script src="src/41_scenes_b.js"></script>
+<script src="src/42_scenes_c.js"></script>
+<script src="src/43_scenes_svg.js"></script>
 <script src="src/50_lrc.js"></script>
 <script src="src/60_app.js"></script>
 </body>

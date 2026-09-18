@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Switch my gender — from F to M（gender gauge）</title>
+<!-- ==========================================================================
+     歌词驱动的 SVG 动态性别仪表盘 —— 单文件版（双击即跑，不联网、不装依赖）
+
+     几何完全对齐 gpt-advice/gender_gauge_svg_assets/ 里的资产包：
+       · configuration.svg    → 上方那个 Configuration 弹窗（白底、深字）
+       · switch_my_gender.svg → 中间 "SWITCH MY GENDER" 大字 + 左右两个性别符号
+       · gender_symbol.svg    → 男女合并符号（圆 r58 + 左下十字 + 右上箭头）
+       · gauge_base.svg       → 外环 r335 / 中环 r305 / 内圈 r145 / 60 条刻度
+       · gauge_0/50/100.svg   → 指针 0% 朝上、50% 朝右、100% 朝右下 + 中央百分比
+       · from_F_to_M_animation_template.svg → 舞台 1600×900、表盘圆心 (800,450)
+
+     动画：弹窗+标题 → 两符号合并（F填女性 / M填男性）→ 同心圆表框 → 合并符号成为指针 → AM开始转 / PM转完
+     驱动：requestAnimationFrame + 外部时间接口 setLyricTime(ms)
+     ========================================================================== -->
+<style>
+  html,body{margin:0;height:100%;background:#11164A;overflow:hidden;
+            font-family:Arial, Helvetica, "Microsoft YaHei", sans-serif}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  svg#gauge{width:100%;height:100%;display:block}
+  .ui{position:fixed;left:14px;bottom:12px;font:12px/1.7 ui-monospace,Consolas,monospace;
+      color:rgba(244,244,244,.5);user-select:none}
+  .ui b{color:#F4F4F4;font-weight:400}
+  .ui input[type=range]{width:200px;vertical-align:middle}
+  .ui button{background:rgba(244,244,244,.10);color:#F4F4F4;border:1px solid rgba(244,244,244,.25);
+      border-radius:3px;font:12px ui-monospace,Consolas,monospace;padding:2px 8px;cursor:pointer}
+  .ui button:hover{background:rgba(244,244,244,.22)}
+  .hint{position:fixed;right:14px;bottom:12px;font:11px ui-monospace,Consolas,monospace;
+        color:rgba(244,244,244,.32);text-align:right}
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- 舞台坐标系与资产包一致：1600 × 900，表盘圆心 (800,450) -->
+  <svg id="gauge" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" aria-label="gender gauge">
+    <defs>
+      <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <!-- 参考截图里的栅格感；很淡，不影响矢量清晰度，可关 -->
+      <pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse">
+        <rect width="4" height="1.1" fill="#F4F4F4" opacity="0.05"/>
+      </pattern>
+    </defs>
+
+    <rect id="bg" width="1600" height="900" fill="#11164A"/>
+
+    <!-- ============ 上半段：Configuration 弹窗 + 标题 + 左右符号 ============ -->
+    <g id="intro">
+      <g id="config-badge">
+        <rect x="635" y="335" width="330" height="58" fill="#F4F4F4"/>
+        <text x="800" y="377" text-anchor="middle" font-family="Arial, Helvetica, sans-serif"
+              font-size="34" font-weight="300" fill="#20233A">Configuration</text>
+      </g>
+      <text id="title-text" x="800" y="510" text-anchor="middle"
+            font-family="Arial, Helvetica, sans-serif" font-size="30"
+            letter-spacing="13" fill="#7C7FA3">SWITCH MY GENDER</text>
+      <g id="symbol-left" transform="translate(410 520) scale(.82)"></g>
+      <g id="symbol-right" transform="translate(1190 520) scale(.82)"></g>
+    </g>
+
+    <!-- ===================== 下半段：仪表盘 ============================== -->
+    <g id="gauge-scene">
+      <g id="gauge-ring" opacity="0">
+        <circle id="ring-outer" cx="800" cy="450" r="335" fill="none" stroke="#F4F4F4" stroke-width="5"/>
+        <circle id="ring-mid"   cx="800" cy="450" r="305" fill="none" stroke="#575B86" stroke-width="2"/>
+        <circle id="ring-inner" cx="800" cy="450" r="145" fill="none" stroke="#575B86" stroke-width="2"/>
+      </g>
+      <g id="gauge-ticks" opacity="0"></g>
+      <g id="ripple-rings">
+        <circle class="ripple" cx="800" cy="450" r="70"  fill="none" stroke="#F4F4F4" stroke-width="2"/>
+        <circle class="ripple" cx="800" cy="450" r="120" fill="none" stroke="#F4F4F4" stroke-width="2"/>
+        <circle class="ripple" cx="800" cy="450" r="190" fill="none" stroke="#F4F4F4" stroke-width="2"/>
+        <circle class="ripple" cx="800" cy="450" r="270" fill="none" stroke="#F4F4F4" stroke-width="2"/>
+      </g>
+      <g id="combined-symbol" transform="translate(800 450) rotate(0)"></g>
+      <!-- 指针形状取自资产：长 205、倒钩 ±27@171、尾 ±6、hub r8 -->
+      <g id="gauge-needle" opacity="0" transform="translate(800 450) rotate(0)">
+        <path id="needle-path" d="M -6,0 L 6,0 L 0,-205 L 27,-171 L -27,-171 Z"
+              fill="#F4F4F4" stroke="none" filter="url(#softGlow)"/>
+        <circle id="needle-hub" cx="0" cy="0" r="8" fill="#11164A" stroke="#F4F4F4" stroke-width="4"/>
+      </g>
+      <text id="percentage-text" opacity="0" x="800" y="465" text-anchor="middle"
+            font-family="Arial, Helvetica, sans-serif" font-size="30" fill="#575B86">0%</text>
+    </g>
+
+    <rect id="scan" x="0" y="0" width="1600" height="900" fill="url(#scanlines)"/>
+  </svg>
+</div>
+
+<div class="ui">
+  <button id="btnPlay">▶ 播放</button>
+  <button id="btnReset">↺ 重来</button>
+  <button id="btnSlow">1.0×</button>
+  <label>  时间 <input type="range" id="scrub" min="0" max="1000" value="0"></label>
+  <span id="readout"></span>
+  <div style="color:rgba(244,244,244,.35)">拖滑杆 = 手动校准 F / to / M 的时间点（直接调 setLyricTime）</div>
+</div>
+<div class="hint">
+  SVG 矢量 · requestAnimationFrame + setLyricTime(ms)<br>
+  接真实音频：CONFIG.audio.src = "你的文件.mp3"（不要加 crossorigin）
+</div>
+
+<script>
+/* ============================================================================
+ * gender-gauge.html 的脚本部分（修正后的设计）
+ *   1) Switch my gender：Configuration 弹窗 + SWITCH MY GENDER + 左右符号
+ *   2) To F, to M：符号向中心合并；F 填充女性符号，M 填充男性符号
+ *   3) Do whatever：合并符号成为钟表指针，周围同心圆泛成表框
+ *   4) From A.M. to P.M.：AM 指针开始转，PM 转完（9 点 → 3 点，扫过 12 点）
+ * ==========================================================================*/
+const CONFIG = {
+  colors: { bg:'#11164A', ink:'#F4F4F4', dim:'#7C7FA3', sub:'#575B86', badgeText:'#20233A' },
+  font: 'Arial, Helvetica, "Microsoft YaHei", sans-serif',
+  stage: { w:1600, h:900, cx:800, cy:450 },
+  symbol: { r:58, stroke:8, arm:93, armFrom:41, filledStroke:26 },
+  intro: {
+    badge: { x:635, y:335, w:330, h:58 },
+    title: { x:800, y:510, size:34, track:13 },
+    left: { x:410, y:520, s:0.82 }, right: { x:1190, y:520, s:0.82 }
+  },
+  ripples: [70, 120, 190, 270],
+  needle: { startRot:225, endRot:45 },
+  timeline: {
+    intro:  { from:88.55, to:88.95 },
+    merge:  { from:90.00, to:90.80 },
+    Ffill:  { from:90.461, to:90.95 },
+    Mfill:  { from:91.385, to:91.90 },
+    ripple: { from:92.015, to:92.60 },
+    windup: { from:92.60, to:94.154 },
+    sweep:  { from:94.154, to:95.077 },
+    hold:   { to:96.00 }, fadeOut:0.9
+  },
+  audio: { src:'', offset:-0.15 },
+  demo:  { from:88.30, speed:1 }
+};
+
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
+const inv=(a,b,v)=>clamp((v-a)/(b-a||1),0,1);
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+function stateAt(t){
+  const T=CONFIG.timeline, N=CONFIG.needle;
+  const s={t, phase:1, intro:0, merge:0, split:1, fFill:0, mFill:0, ripple:0, needleRot:0, alpha:1};
+  s.intro = smooth(inv(T.intro.from, T.intro.to, t));
+  s.split = 1 - smooth(inv(T.merge.from, T.merge.to, t));
+  s.merge = smooth(inv(T.merge.from, T.merge.to, t));
+  s.titleFade = 1 - s.merge;   // 两个符号一结合，弹窗和标题就逐渐消失
+  s.fFill = smooth(inv(T.Ffill.from, T.Ffill.to, t));
+  s.mFill = smooth(inv(T.Mfill.from, T.Mfill.to, t));
+  s.ripple = inv(T.ripple.from, T.ripple.to, t);
+  if (t >= T.windup.from) s.needleRot = lerp(0, N.startRot, smooth(inv(T.windup.from, T.windup.to, t)));
+  if (t >= T.sweep.from) s.needleRot = lerp(N.startRot, N.endRot, smooth(inv(T.sweep.from, T.sweep.to, t)));
+  if (t >= T.sweep.to) s.needleRot = N.endRot;
+  s.phase = t < T.merge.from ? 1 : (t < T.Ffill.from ? 2 : (t < T.Mfill.from ? 3 : (t < T.ripple.from ? 4 : (t < T.sweep.from ? 5 : (t < T.sweep.to ? 6 : 7)))));
+  const fs = T.hold.to - T.fadeOut;
+  if (t > fs) s.alpha = 1 - smooth(inv(fs, T.hold.to, t));
+  return s;
+}
+
+/* 符号 SVG：kind = 'female' | 'male' | 'combined'，全部描边不填充。 */
+function symbolSVG(kind){
+  const S=CONFIG.symbol, ink=CONFIG.colors.ink;
+  const sw=S.stroke;
+  const st=' fill="none" stroke="'+ink+'" stroke-width="'+sw+'" stroke-linecap="round"';
+  let out = '<circle cx="0" cy="0" r="'+S.r+'"'+st+'/>';
+  if (kind==='female' || kind==='combined') {
+    out += '<path d="M -'+S.armFrom+','+S.armFrom+' L -'+S.arm+','+S.arm+'"'+st+'/>';
+    out += '<path d="M -'+S.arm+','+S.arm+' L '+(-S.arm+20)+','+(S.arm+20)+' M -'+S.arm+','+S.arm+' L '+(-S.arm-20)+','+(S.arm-20)+'"'+st+'/>';
+  }
+  if (kind==='male' || kind==='combined') {
+    out += '<path d="M '+S.armFrom+',-'+S.armFrom+' L '+S.arm+',-'+S.arm+'"'+st+'/>';
+    out += '<path d="M 67,-93 L 93,-93 L 93,-67"'+st+' stroke-linejoin="round"/>';
+  }
+  return out;
+}
+
+const $=id=>document.getElementById(id);
+const CX=CONFIG.stage.cx, CY=CONFIG.stage.cy;
+
+function render(s){
+  const C=CONFIG, I=C.intro, ink=C.colors.ink;
+  $('gauge').style.opacity = s.alpha.toFixed(3);
+  updateImages(s.t);
+  const introA = s.intro * s.alpha;
+
+  /* 弹窗 + 标题 + 左右符号 */
+  const titleFade = s.titleFade === undefined ? 1 : s.titleFade;
+  $('intro').setAttribute('opacity', (introA * titleFade).toFixed(3));
+  $('config-badge').setAttribute('opacity', (introA * titleFade).toFixed(3));
+  $('title-text').setAttribute('opacity', (introA * titleFade).toFixed(3));
+  const xl=lerp(I.left.x, CX, s.merge), yl=lerp(I.left.y, CY, s.merge);
+  const xr=lerp(I.right.x, CX, s.merge), yr=lerp(I.right.y, CY, s.merge);
+  const k=lerp(I.left.s, 1, s.merge);
+  const sideFade=(1-smooth(inv(0.82,1,s.merge))) * s.alpha;
+  $('symbol-left').setAttribute('transform','translate('+xl.toFixed(1)+' '+yl.toFixed(1)+') scale('+k.toFixed(3)+')');
+  $('symbol-left').setAttribute('opacity', sideFade.toFixed(3));
+  $('symbol-right').setAttribute('transform','translate('+xr.toFixed(1)+' '+yr.toFixed(1)+') scale('+k.toFixed(3)+')');
+  $('symbol-right').setAttribute('opacity', sideFade.toFixed(3));
+
+  /* F / M 填充 */
+  $('symbol-left').innerHTML = symbolSVG('female');
+  $('symbol-right').innerHTML = symbolSVG('male');
+
+  /* 合并符号 = 指针 */
+  const ng=$('combined-symbol');
+  ng.setAttribute('opacity', s.merge>0.004 ? s.alpha.toFixed(3) : '0');
+  ng.setAttribute('transform','translate('+CX+' '+CY+') rotate('+s.needleRot.toFixed(2)+')');
+  ng.innerHTML = symbolSVG('combined');
+
+  /* 同心圆表框 */
+  const rip=Array.prototype.slice.call($('ripple-rings').children);
+  rip.forEach(function(c,i){
+    const kk=clamp(s.ripple*1.35 - i*0.18, 0, 1);
+    c.setAttribute('opacity', kk>0 ? (0.55*(1-kk)+0.14).toFixed(3) : '0');
+    c.setAttribute('stroke-width', (1.5+5*(1-kk)).toFixed(2));
+    c.setAttribute('r', lerp(40, CONFIG.ripples[i], kk).toFixed(1));
+  });
+  return s;
+}
+
+/* To F, to M：直接用两张透明 PNG，FromS 在歌词 To 时渐变成 ToM（到 M 完成） */
+function imageState(t){
+  const I={in:97.60, crossFrom:97.739, crossTo:98.769, out:99.35, outTo:99.70};
+  const a=1;   // 图片有自己的窗口，不受仪表盘整体 alpha 影响
+  const fromS=smooth(inv(I.in,I.crossFrom,t))*(1-smooth(inv(I.crossFrom,I.crossTo,t)));
+  const toM=smooth(inv(I.crossFrom,I.crossTo,t))*(1-smooth(inv(I.out,I.outTo,t)));
+  return {fromS:fromS*a, toM:toM*a, on:(fromS+toM)>0.004};
+}
+function updateImages(t){
+  let layer=document.getElementById('gaugelayer');
+  if(!layer){
+    layer=document.createElement('div');
+    layer.id='gaugelayer';
+    layer.style.cssText='position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:3;';
+    ['gauge-img-froms','gauge-img-tom'].forEach(function(id,i){
+      const im=document.createElement('img');
+      im.id=id;
+      im.src=i===0?'gpt-advice/transparent_svg_assets/FromS.png':'gpt-advice/transparent_svg_assets/ToM.png';
+      im.style.cssText='position:absolute;left:50%;top:50%;width:66%;transform:translate(-50%,-50%);opacity:0;';
+      layer.appendChild(im);
+    });
+    document.getElementById('stage').appendChild(layer);
+  }
+  const st=imageState(t);
+  const a=document.getElementById('gauge-img-froms'), b=document.getElementById('gauge-img-tom');
+  if(a) a.style.opacity=String(st.fromS);
+  if(b) b.style.opacity=String(st.toM);
+  layer.style.display=st.on?'block':'none';
+}
+
+/* ================= 外部时间接口 ================= */
+const S={songTime:CONFIG.demo.from, playing:false, speed:1, lastMs:0};
+let audio=null;
+if(CONFIG.audio.src){ audio=new Audio(); audio.preload='auto'; audio.src=CONFIG.audio.src; }
+
+function setLyricTime(ms){
+  S.songTime = ms/1000;
+  const st=render(stateAt(S.songTime));
+  updateReadout(st);
+  return st;
+}
+
+/* ================= 时钟 + 控件 ================= */
+function tickFrame(){
+  if(S.playing){
+    if(audio && audio.readyState>=1) setLyricTime((audio.currentTime+CONFIG.audio.offset)*1000);
+    else {
+      const now=performance.now(), dt=(now-S.lastMs)/1000*S.speed; S.lastMs=now;
+      setLyricTime((S.songTime+dt)*1000);
+      if(S.songTime>CONFIG.timeline.hold.to){ S.playing=false; syncBtn(); }
+    }
+  }
+  updateScrub();
+  requestAnimationFrame(tickFrame);
+}
+function updateReadout(st){
+  st=st||stateAt(S.songTime);
+  $('readout').innerHTML='  t=<b>'+S.songTime.toFixed(3)+'s</b>  阶段 <b>'+st.phase+
+    '</b>  F填充 <b>'+Math.round(st.fFill*100)+'%</b>  M填充 <b>'+Math.round(st.mFill*100)+'%</b>'+
+    '  指针 <b>'+st.needleRot.toFixed(0)+'°</b>';
+}
+function updateScrub(){
+  const el=$('scrub'); if(document.activeElement===el) return;
+  const a=CONFIG.timeline.intro.from-1.2, b=CONFIG.timeline.hold.to;
+  el.value=String(Math.round(clamp((S.songTime-a)/(b-a),0,1)*1000));
+}
+function syncBtn(){ $('btnPlay').textContent=S.playing?'|| 暂停':'▶ 播放'; }
+$('btnPlay').onclick=function(){
+  S.playing=!S.playing; S.lastMs=performance.now();
+  if(S.playing){
+    if(audio){ audio.currentTime=Math.max(0,S.songTime-CONFIG.audio.offset); audio.play().catch(function(){}); }
+    if(S.songTime>=CONFIG.timeline.hold.to-0.01) S.songTime=CONFIG.demo.from;
+  } else if(audio) audio.pause();
+  syncBtn();
+};
+$('btnReset').onclick=function(){ S.songTime=CONFIG.demo.from; S.lastMs=performance.now(); setLyricTime(S.songTime*1000); };
+$('btnSlow').onclick=function(){ S.speed=S.speed===1?0.25:1; $('btnSlow').textContent=S.speed+'x'; };
+$('scrub').oninput=function(){
+  S.playing=false; syncBtn();
+  const a=CONFIG.timeline.intro.from-1.2, b=CONFIG.timeline.hold.to;
+  setLyricTime((a+(b-a)*(parseFloat(this.value)/1000))*1000);
+};
+
+/* ================= 启动 ================= */
+$('symbol-left').innerHTML=symbolSVG('female');
+$('symbol-right').innerHTML=symbolSVG('male');
+$('combined-symbol').innerHTML=symbolSVG('combined');
+setLyricTime(S.songTime*1000);
+syncBtn();
+requestAnimationFrame(tickFrame);
+
+window.GAUGE={ CONFIG, setLyricTime, stateAt, render };
+
+</script>
+</body>
+</html>

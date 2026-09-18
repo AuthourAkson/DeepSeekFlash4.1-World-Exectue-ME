@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>probe — world.execute(me); live state</title>
+<style>
+  :root{--bg:#04070a;--ink:#e2f0f8;--dim:#5c7d94;--line:#1d3341;--accent:#56d6e8;
+        --hot:#e83e36;--ok:#7cea9a;--warn:#f6b03e;
+        --mono:"Consolas","SFMono-Regular",Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;padding:22px;background:var(--bg);color:var(--ink);font:13.5px/1.6 var(--mono)}
+  h1{font-size:16px;margin:0 0 3px;font-weight:400;letter-spacing:.02em}
+  .sub{color:var(--dim);margin-bottom:16px;font-size:12.5px}
+  iframe{position:absolute;left:-3000px;top:0;width:1280px;height:760px;border:0}
+  table{border-collapse:collapse;width:100%;margin-bottom:16px}
+  th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);font-size:12.5px}
+  th{color:var(--dim);font-weight:400;letter-spacing:.1em;text-transform:uppercase;font-size:10.5px}
+  .yes{color:var(--ok)}.no{color:var(--hot)}.meh{color:var(--warn)}
+  pre{background:#060b10;border:1px solid var(--line);padding:13px;white-space:pre-wrap;
+      word-break:break-word;font-size:12px;max-height:320px;overflow:auto}
+  h2{font-size:12px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;
+     margin:18px 0 7px;font-weight:400}
+  .verdict{border:1px solid var(--accent);padding:12px 15px;margin:16px 0;background:#061014}
+  .verdict b{color:var(--accent);font-weight:400}
+  .verdict.bad{border-color:var(--hot);background:#100606}
+  .verdict.bad b{color:var(--hot)}
+</style>
+</head>
+<body>
+
+<h1>probe.html — 读取正在运行的 index.html 的内部状态</h1>
+<div class="sub">不要关闭这一页。等进度跑完，把下面全部内容复制给我。</div>
+<div id="verdict" class="verdict">正在启动 index.html 并观察…</div>
+
+<h2>各阶段</h2>
+<table>
+  <thead><tr><th style="width:38%">检查项</th><th style="width:10%">结果</th><th>细节</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<h2>控制台输出（index.html 打印的）</h2>
+<pre id="console">（等待中）</pre>
+
+<h2>完整报告（请复制这一段）</h2>
+<pre id="report">running…</pre>
+
+<iframe id="frame" src="index.html"></iframe>
+
+<script>
+(function () {
+  'use strict';
+  var lines = [], tbody = document.getElementById('rows');
+  var conBox = document.getElementById('console'), conLines = [];
+  function say(s) { lines.push(s); document.getElementById('report').textContent = lines.join('\n'); }
+  function con(s) { conLines.push(s); conBox.textContent = conLines.join('\n'); }
+  function row(name, state, detail) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + name + '</td>'
+      + '<td class="' + (state === 'yes' ? 'yes' : state === 'no' ? 'no' : 'meh') + '">'
+      + (state === 'yes' ? '通过' : state === 'no' ? '失败' : '注意') + '</td>'
+      + '<td>' + String(detail).replace(/</g, '&lt;') + '</td>';
+    tbody.appendChild(tr);
+    var tag = state === 'yes' ? 'PASS' : state === 'no' ? 'FAIL' : 'WARN';
+    say(pad(name, 34) + tag + '  ' + detail);
+  }
+  function pad(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
+
+  var results = [];
+  var frame = document.getElementById('frame');
+  var problems = [];
+
+  function check(name, okFlag, detail) {
+    results.push({ name: name, ok: okFlag });
+    row(name, okFlag === true ? 'yes' : okFlag === false ? 'no' : 'meh', detail);
+    if (okFlag === false) problems.push(name);
+  }
+
+  say('probe of index.html');
+  say('page : ' + location.href);
+  say('');
+
+  var w = null, phase = 0, ticks = 0;
+
+  function report(verdictText, isBad) {
+    var v = document.getElementById('verdict');
+    v.innerHTML = verdictText;
+    v.className = 'verdict' + (isBad ? ' bad' : '');
+    say('');
+    say(problems.length ? 'PROBLEMS  : ' + problems.join(' | ') : 'PROBLEMS  : none');
+    say('done.');
+  }
+
+  function step() {
+    ticks++;
+    try { w = frame.contentWindow; } catch (e) { w = null; }
+    var EM = w && w.EM;
+
+    /* ---- phase 0: did the page even start? ---- */
+    if (phase === 0 && ticks > 4) {
+      phase = 1;
+      check('index.html 被加载', !!w, w ? 'ok' : '无法访问 iframe（可能被浏览器阻止）');
+      var doc = w && w.document;
+      check('脚本已解析（window.EM 存在）', !!(EM && EM.Settings),
+        EM ? 'EM 版本对象存在' : 'EM 未定义 —— 说明某个 <script> 没有执行');
+      if (EM) {
+        check('引擎已初始化（EM.__test 存在）', !!EM.__test,
+          EM.__test ? '测试接口可用' : 'EM.__test 未定义 —— 60_app.js 没有跑完');
+        check('运行时自检', EM.__selftest ? EM.__selftest.ok : null,
+          EM.__selftest ? (EM.__selftest.ok ? 'passed' : 'FAILED: ' + EM.__selftest.fails.join('; '))
+                        : 'EM.__selftest 未定义 —— 50_lrc.js 没跑');
+        check('歌词时间轴', EM.Lyrics ? EM.Lyrics.count : null,
+          EM.Lyrics ? EM.Lyrics.count + ' 条 cue' : '未定义');
+        check('画板注册数', EM.SceneOrder ? EM.SceneOrder.length : null,
+          EM.SceneOrder ? EM.SceneOrder.length + ' 块' : '未定义');
+      }
+      /* capture the console from the frame */
+      try {
+        ['log', 'info', 'warn', 'error'].forEach(function (k) {
+          var orig = w.console[k];
+          w.console[k] = function () {
+            var a = Array.prototype.slice.call(arguments).map(function (x) {
+              return typeof x === 'string' ? x : (x && x.message) ? x.message : String(x);
+            });
+            con(k.toUpperCase() + ': ' + a.join(' '));
+            try { orig.apply(w.console, arguments); } catch (e) {}
+          };
+        });
+      } catch (e) { con('could not hook console: ' + e.message); }
+    }
+
+    /* ---- phase 1: audio state ---- */
+    if (phase === 1 && ticks > 90) {
+      phase = 2;
+      var a = w && w.document.getElementById('audio');
+      if (!a) { check('找到 <audio> 元素', false, '没有 #audio'); }
+      else {
+        /* The single most important check: a crossorigin attribute turns the
+           request into CORS mode, which file:// can never satisfy, so Chrome
+           fails the load with error code 4 and the film is silent. */
+        var cross = a.hasAttribute('crossorigin') ? a.getAttribute('crossorigin') : null;
+        check('crossorigin 属性必须不存在', cross === null,
+          cross === null ? '(无，正确)' : '(=“' + cross + '”) 这会导致本地文件必然加载失败！');
+        check('<audio> 的 src 已设置', !!a.getAttribute('src'),
+          'src="' + (a.getAttribute('src') || '(空)') + '"');
+        check('浏览器解析出的实际地址', !!a.currentSrc, a.currentSrc || '(空)');
+        var d = a.duration;
+        check('音频时长', (d > 1) ? true : false,
+          'duration=' + d + '（应为 211.9 左右，NaN 表示没读出来）');
+        check('networkState', a.networkState === 1 ? true : 'meh',
+          a.networkState + ' (0=EMPTY 1=IDLE 2=LOADING 3=NO_SOURCE)');
+        check('readyState', a.readyState >= 2 ? true : 'meh',
+          a.readyState + ' (0..4, 4=ENOUGH_DATA)');
+        check('audio.error (code 4 = 被拒绝/CORS)', a.error ? false : true,
+          a.error ? ('code=' + a.error.code + (a.error.code === 4 ? ' — SRC_NOT_SUPPORTED，通常是 crossorigin 或路径错误' : '')) : 'none');
+        var S = EM && EM.__test ? EM.__test.state() : null;
+        check('引擎认为音频可用 (audioOK)', S ? S.audioOK : null,
+          S ? String(S.audioOK) + (S.audioOK ? '' : ' —— 引擎走了兜底时钟，不会有声音') : 'no state');
+        check('是否启用了兜底时钟', S ? !S.fallback : null,
+          S ? (S.fallback ? '是（NO AUDIO 模式）' : '否（正常音频驱动）') : 'no state');
+        var boot = w.document.getElementById('boot-msg');
+        check('启动提示是否已消失', boot ? boot.classList.contains('gone') : null,
+          boot ? ('text="' + (boot.textContent || '').slice(0, 60) + '" gone=' + boot.classList.contains('gone')) : 'no #boot-msg');
+      }
+    }
+
+    /* ---- phase 2: try to play ---- */
+    if (phase === 2 && ticks > 120) {
+      phase = 3;
+      var S0 = EM && EM.__test ? EM.__test.state() : null;
+      var before = S0 ? S0.frames : 0;
+      w.__framesBefore = before;
+      /* start through the real public path, exactly like pressing the button */
+      w.__playError = '';
+      try {
+        var r = w.document.getElementById('audio').play();
+        if (r && r.catch) r.catch(function (e) { w.__playError = e.name + ': ' + e.message; });
+      } catch (e) { w.__playError = 'threw: ' + e.message; }
+      try { w.EM.__test.play(); } catch (e) { w.__playError += ' | EM.play threw: ' + e.message; }
+      con('called audio.play() and EM.__test.play()');
+    }
+
+    /* ---- phase 3: did anything move? ---- */
+    if (phase === 3 && ticks > 200) {
+      phase = 4;
+      var a2 = w.document.getElementById('audio');
+      var S = EM.__test.state();
+      check('audio.play() 是否被拒绝', w.__playError ? false : true,
+        w.__playError || '没有被拒绝');
+      check('audio.paused', a2.paused === false ? true : false, 'paused=' + a2.paused);
+      check('audio.currentTime 是否在推进', a2.currentTime > 0.05 ? true : false,
+        'currentTime=' + a2.currentTime.toFixed(3) + ' s');
+      check('渲染帧数是否在增长', S.frames > (w.__framesBefore || 0) ? true : false,
+        'frames ' + (w.__framesBefore || 0) + ' → ' + S.frames);
+      check('引擎时钟 t', S.t > 0.05 ? true : false, 't=' + S.t.toFixed(3) + ' s');
+      check('引擎是否认为自己正在播放', S.running === true ? true : false, 'running=' + S.running);
+      check('当前画面场景', S.scene ? true : false, 'cue#' + S.cue + ' scene=' + S.scene);
+      check('画布尺寸', (S.w > 0 && S.h > 0) ? true : false, S.w + 'x' + S.h + ' (dpr=' + S.dpr + ')');
+      check('fps', S.fps > 20 ? true : 'meh', S.fps.toFixed(1));
+      var line = w.document.getElementById('lyric-line');
+      check('歌词面板', line && line.textContent ? true : false,
+        line ? '"' + line.textContent + '"' : 'no element');
+
+      /* verdict */
+      var audioMoved = a2.currentTime > 0.05;
+      var drewMoved = S.frames > (w.__framesBefore || 0);
+      var t2 = S.t > 0.05;
+      if (audioMoved && drewMoved && t2) {
+        report('<b>一切正常。</b>index.html 在这个浏览器里能播放、时钟在推进。'
+          + '如果你看到的是黑屏或点击无反应，那问题在显示层（窗口尺寸/被遮挡），而不是逻辑层——'
+          + '请把这份报告连同你的屏幕截图一起发我。', false);
+      } else if (!drewMoved) {
+        report('<b>找到了：渲染循环完全没有画出任何帧。</b>'
+          + '这是最严重的情况 —— 请把这份报告发我，我会据此定位。', true);
+      } else if (!audioMoved) {
+        report('<b>找到了：音频没有开始播放</b>（audio.paused=' + a2.paused
+          + ', currentTime=' + a2.currentTime.toFixed(3) + '）。'
+          + (w.__playError ? 'play() 报错：' + w.__playError : 'play() 没有报错但也没走。')
+          + ' 画面应当已经在用兜底时钟播放了。请把报告发我。', true);
+      } else {
+        report('<b>部分异常</b> —— 请把完整报告发我。', true);
+      }
+    }
+
+    if (phase < 4) setTimeout(step, 50);
+  }
+
+  setTimeout(step, 120);
+})();
+</script>
+</body>
+</html>

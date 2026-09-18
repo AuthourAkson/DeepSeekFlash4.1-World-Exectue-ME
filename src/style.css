@@ -1,0 +1,182 @@
+/* ============================================================================
+ * style.css — 界面
+ * ----------------------------------------------------------------------------
+ * 片子本身全部画在 canvas 上。这里只负责外壳：等比居中的舞台、
+ * 底部控制条、状态行、错误横幅、调试叠层。
+ * 界面刻意压得很暗很轻 —— 它不该跟画面抢注意力。
+ * ==========================================================================*/
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: #04060a;
+  color: #cfe6f2;
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+}
+
+body { display: flex; flex-direction: column; }
+
+#stagewrap {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 0;
+  background:
+    radial-gradient(1200px 600px at 50% 40%, #0a1018 0%, #04060a 70%);
+}
+
+#stage {
+  display: block;
+  background: #04060a;
+  box-shadow: 0 0 0 1px rgba(127, 227, 255, .08), 0 24px 80px rgba(0, 0, 0, .8);
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ 控制条 */
+
+#bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  height: 58px;
+  background: linear-gradient(180deg, rgba(6, 10, 16, .55), rgba(4, 6, 10, .96));
+  border-top: 1px solid rgba(127, 227, 255, .12);
+  transition: opacity .25s ease;
+  user-select: none;
+}
+
+#bar button {
+  width: 34px; height: 30px;
+  background: rgba(127, 227, 255, .06);
+  color: #bfe9ff;
+  border: 1px solid rgba(127, 227, 255, .25);
+  border-radius: 4px;
+  font-size: 13px; line-height: 1;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+#bar button:hover { background: rgba(127, 227, 255, .16); border-color: rgba(127, 227, 255, .5); }
+#bar button:active { transform: translateY(1px); }
+
+#time {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  color: #7fa8bd;
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+#seekwrap { position: relative; flex: 1 1 auto; height: 34px; display: flex; align-items: center; }
+#ticks { position: absolute; left: 0; right: 0; top: 6px; height: 8px; pointer-events: none; }
+#ticks .tick {
+  position: absolute; top: 0; width: 1px; height: 5px;
+  background: rgba(127, 227, 255, .35);
+}
+#ticks .tick.major { height: 8px; background: rgba(127, 227, 255, .7); }
+#playhead {
+  position: absolute; top: 2px; width: 1px; height: 28px;
+  background: #eaf6ff; opacity: .55; pointer-events: none;
+}
+
+input[type=range] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 22px; background: transparent; cursor: pointer;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 3px; background: rgba(127, 227, 255, .22); border-radius: 2px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; margin-top: -5px;
+  border-radius: 50%; background: #bfe9ff; border: none;
+  box-shadow: 0 0 8px rgba(127, 227, 255, .6);
+}
+input[type=range]::-moz-range-track { height: 3px; background: rgba(127, 227, 255, .22); }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: none; border-radius: 50%; background: #bfe9ff; }
+
+.grp {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; letter-spacing: .12em; color: #7fa8bd;
+  white-space: nowrap;
+}
+.grp input[type=range] { width: 110px; }
+.grp b {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px; color: #bfe9ff; font-weight: 400; min-width: 62px;
+}
+
+/* --------------------------------------------------------------- 状态 / 叠层 */
+
+.status {
+  position: fixed; left: 12px; bottom: 66px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px; color: #6f8fa3;
+  background: rgba(4, 6, 10, .6);
+  padding: 3px 8px; border-radius: 3px;
+  pointer-events: none; transition: opacity .25s;
+}
+.status.ok { color: #8fd9b6; }
+.status.loading { color: #d9c98f; }
+.status.err { color: #ff8fa0; }
+
+#stats {
+  position: fixed; right: 12px; bottom: 66px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px; color: #5c7b8d; pointer-events: none;
+}
+
+#banner {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  max-width: min(720px, 86vw);
+  padding: 18px 22px;
+  background: rgba(20, 6, 10, .92);
+  border: 1px solid rgba(255, 90, 120, .5);
+  border-radius: 6px;
+  color: #ffd9e0;
+  font-size: 13px; line-height: 1.75;
+  z-index: 30;
+}
+#banner code {
+  font-family: ui-monospace, Consolas, monospace;
+  background: rgba(255, 255, 255, .07);
+  padding: 1px 5px; border-radius: 3px; color: #ffeaf0;
+}
+#banner .dim { color: #b98e97; }
+
+#debug {
+  position: fixed; left: 12px; top: 12px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px; line-height: 1.6;
+  color: #a9d8ea;
+  background: rgba(4, 8, 12, .82);
+  border: 1px solid rgba(127, 227, 255, .25);
+  border-radius: 4px;
+  padding: 10px 12px;
+  max-width: 560px;
+  pointer-events: none;
+  z-index: 20;
+}
+#debug b { color: #6fd0f0; font-weight: 600; }
+
+#start {
+  position: fixed; left: 0; right: 0; top: 0; bottom: 58px;   /* 别盖住控制条 */
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px;
+  text-align: center;
+  font-size: 13px; letter-spacing: .06em; color: #cfe6f2;
+  background: radial-gradient(600px 300px at 50% 50%, rgba(10, 20, 30, .55), rgba(2, 4, 8, .78));
+  cursor: pointer;
+  z-index: 10;
+}
+#start .big {
+  font-size: 44px; color: #bfe9ff;
+  text-shadow: 0 0 30px rgba(127, 227, 255, .6);
+}
+#start .dim { color: #7fa8bd; font-size: 11.5px; }
+
+@media (max-width: 900px) {
+  .grp input[type=range] { width: 60px; }
+  #time { min-width: 0; font-size: 11px; }
+}

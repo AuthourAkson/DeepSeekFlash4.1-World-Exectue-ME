@@ -320,7 +320,7 @@ if (!NO_SHOT) {
     [75.2, 'svg-eggplant'], [76.2, 'give-hand-eggplant'], [78.9, 'svg-tomato'], [79.8, 'give-hand-tomato'], [81.2, 'svg-antioxidants'],
     [82.6, 'svg-tabbycat'], [84.0, 'svg-purr'], [86.2, 'svg-onlygod'], [87.7, 'svg-existence'],
     [99.5, 'enter'],
-    [112.4, 'you-have-left-2'], [113.6, 'you-have-left'], [132.5, 'illegal'], [180.2, 'love'], [211.5, 'outro']];
+    [112.4, 'you-have-left-2'], [113.6, 'you-have-left'], [114.6, 'left-echo'], [116.6, 'left-me-in'], [117.8, 'isolation'], [132.5, 'illegal'], [180.2, 'love'], [211.5, 'outro']];
   for (const [t, name] of shots) {
     const f = path.join(SHOTS, 'browser-' + String(t.toFixed(1)).padStart(6, '0') + '-' + name + '.png');
     const args = baseArgs.concat(['--virtual-time-budget=4000', '--screenshot=' + f, url + '?t=' + t]);

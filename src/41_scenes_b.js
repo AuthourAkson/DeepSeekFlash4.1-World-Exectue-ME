@@ -330,17 +330,21 @@
     M.lyric(cue.text, LINE + 120, 200, 32, INK(wr, 0.95), p, {});
   });
 
+  /* 参考另一版 L.left4：同一段波形 5 层缩放、逐层变弱 —— 回声，源已不在。 */
   S.def('s075', { name: 'You have left  (echo)' }, function (p, cue, t, wr) {
-    var x = CX - 100, y = 540;
+    var cx = CX, base = 430, x0 = CX - 420, x1 = CX + 420;
     for (var i = 0; i < 5; i++) {
-      var k = EM.clamp(p * 1.6 - i * 0.22, 0, 1);
-      if (k <= 0) continue;
+      var a = EM.clamp(p * 1.6 - i * 0.18, 0, 1);
+      if (a <= 0.01) continue;
+      var sc = 1 + i * 0.22;
+      var col = i === 0 ? INK(wr, 0.9 * a) : A(wr, 0.85 * a * Math.pow(0.7, i));
       D.save();
-      D.translate(0, 0);
-      M.person(x + i * 60, y - i * 8, 24 - i * 2, EM.withA(EM.mix(A(wr, 1), EM.PAL.warm, i / 5), 0.55 * k * Math.pow(0.62, i)), 'leaving');
+      D.at(cx, base, 0, sc); D.translate(-cx, -base);
+      D.wave(x0, x1, base + i * 22 - 40, 120 * (1 - i * 0.14), 7 + i * 2,
+        t * (1 + i * 0.2), col, 3 - i * 0.45, 96);
       D.restore();
-      D.mono('echo  ' + (i + 1), x + i * 60 - 40, y + 170 + i * 20, 13, A(wr, 0.3 * Math.pow(0.7, i) * k));
     }
+    M.mono('reverberation  ·  source absent', LINE + 120, 760, 15, A(wr, 0.55));
     M.lyric(cue.text, LINE + 120, 200, 32, INK(wr, 0.95), p, {});
   });
 
@@ -356,16 +360,22 @@
     M.lyric(cue.text, LINE + 120, 200, 32, INK(wr, 0.95), p, {});
   });
 
+  /* You have left me in：一行终端提示 + 一个越变越宽的填空格，格子里光标闪烁。 */
   S.def('s077', { name: 'You have left me in' }, function (p, cue, t, wr) {
-    var x = CX + 40, y = 470, k = EM.ease(EM.clamp(p * 1.2, 0, 1));
-    var gap = 20 + 320 * k;
-    D.line([[x - gap - 220, y - 40], [x - gap, y], [x - gap - 60, y + 60]], A(wr, 0.7), 3);
-    D.line([[x + gap, y - 10], [x + gap + 220, y + 30], [x + gap + 60, y + 90]], WARM(0.7), 3);
-    for (var i = 0; i < 8; i++) {
-      var a = EM.h(i, 2, 0) * EM.TAU;
-      D.circle(x + Math.cos(a) * gap, y + Math.sin(a) * gap, 2.4, A(wr, 0.3));
-    }
-    D.dashed(x - gap, y, x + gap, y, A(wr, 0.2), 1, 6, 6);
+    var size = 30, sx = LINE + 160, sy = 300;
+    var prompt = 'you have left me in ';
+    M.mono(prompt, sx, sy, size, INK(wr, 0.95));
+    var wp = D.measure(prompt, size, true);
+    var grow = EM.clamp(p / 0.6, 0, 1);
+    var bw = 34 + 326 * grow;
+    var bx = sx + wp + 8;
+    // 填空格子
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.08));
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.5), 1.6);
+    // 待输入光标：方块 + 下划线一起闪
+    M.caret(bx + 6, sy, size, WARM(0.95), t, 0.5);
+    if ((t % 1.0) < 0.5) D.seg(bx + 4, sy + size * 0.42, bx + bw - 4, sy + size * 0.42, WARM(0.8), 2);
+    M.mono('awaiting input', bx, sy + 64, 14, A(wr, 0.55));
     M.lyric(cue.text, LINE + 120, 200, 32, INK(wr, 0.95), p, {});
   });
 
@@ -378,6 +388,23 @@
     }
     for (var q = 10; q >= 1; q--) D.circle(x, y, q * 30, EM.withA(EM.PAL.accent2, 0.055));
     D.circle(x, y, 7 + 8 * EM.hit(t, 0.3), [255, 255, 255, 0.9]);
+    // 把上一句的空格填上：ISOLATION 逐字打进去
+    var size = 30, sx = LINE + 160, sy = 300;
+    var prompt = 'you have left me in ';
+    var wp = D.measure(prompt, size, true);
+    var bx = sx + wp + 8, bw = 360;
+    D.rect(sx - 12, sy - size * 1.0, bw + 24 + wp, size * 1.5, [4, 6, 12, 0.6]);
+    M.mono(prompt, sx, sy, size, INK(wr, 0.9));
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.10));
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.6), 1.6);
+    var full = 'ISOLATION';
+    var typed = full.slice(0, Math.max(1, Math.round(full.length * EM.clamp(p / 0.45, 0, 1))));
+    M.mono(typed, bx + 10, sy, size, INK(wr, 1));
+    if (typed.length < full.length) {
+      M.caret(bx + 12 + D.measure(typed, size, true), sy, size, WARM(0.95), t, 0.5);
+    } else {
+      M.mono('✓ accepted', bx + bw + 16, sy, 15, A(wr, 0.7));
+    }
     M.head('ISOLATION', x, 780, 54, INK(wr, 1), { align: 'center', weight: 'bold', track: 6 });
     M.lyric(cue.text === 'ISOLATION' ? '' : cue.text, LINE + 120, 160, 26, INK(wr, 0.8), p, {});
   });

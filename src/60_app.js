@@ -228,15 +228,15 @@
   APP.grade = grade;
 
   /** 降采样泛光 + 色度分离 + 切片错位。只在世界"过载"时出现。 */
-  function composite(t, w, idx) {
+  function composite(t, w) {
     var hot = w.hot;
     if (hot < 0.30) return;
-    var i, n, CW = canvas.width, CH = canvas.height;
+    var i, n;
     // 合成器全程在**设备像素空间**工作：先清掉画布上的舞台缩放矩阵。
+    // 之前少了这一步，drawImage(..., canvas.width, canvas.height) 会被舞台矩阵
+    // 再缩放一次（桌面覆盖 83%、手机 61%），导致双端画面不一致。
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    var scene = (WX.CUES && WX.CUES[idx]) ? WX.CUES[idx].scene : '';
-    var multidim = scene !== 's111';      // s111「If I can have you back」保持干净
-    // 泛光：直接从主画布降采样两次，铺满整个画面
+    // 泛光：直接从主画布降采样两次（不做整屏拷贝，软件渲染下这一条很关键）
     var bs = B.small.getContext('2d'), ts = B.tiny.getContext('2d');
     bs.clearRect(0, 0, B.small.width, B.small.height);
     bs.globalCompositeOperation = 'source-over';
@@ -246,48 +246,46 @@
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.10 + 0.22 * hot;
-    ctx.drawImage(B.small, 0, 0, CW, CH);
+    ctx.drawImage(B.small, 0, 0, canvas.width, canvas.height);
     ctx.globalAlpha = 0.08 + 0.16 * hot;
-    ctx.drawImage(B.tiny, 0, 0, CW, CH);
+    ctx.drawImage(B.tiny, 0, 0, canvas.width, canvas.height);
     ctx.restore();
-    // 色散分离与切片错位要读回整屏，代价高：只在世界"过载"时出现。
-    // MV 模式不做色度分离 —— 参考 MV 是纯灰的；s111 也不做，保持干净。
-    if (hot < 0.62 || w.mvOn || !multidim) return;
+    // 色度分离与切片错位要读回整屏，代价高：只在世界"过载"时出现。
+    // MV 模式不做色度分离 —— 参考 MV 是纯灰的，红蓝错位是我自己的效果，不是它的。
+    if (hot < 0.62 || w.mvOn) return;
     B.full.getContext('2d').drawImage(canvas, 0, 0);
-    // 多维重影：3 份带色偏 + 微缩放/旋转的整帧副本，加光叠回全屏
-    var tn = B.tint.getContext('2d');
-    var tints = [[255, 40, 70], [40, 130, 255], [255, 180, 60]];
-    var dirs = [[1, -0.3], [-1, 0.3], [0.3, 1]];
-    var sep = (4 + 20 * hot) * (CW / 1600);
-    var cx = CW / 2, cy = CH / 2;
-    for (i = 0; i < tints.length; i++) {
-      tn.setTransform(1, 0, 0, 1, 0, 0);
+    var sep = (2 + 12 * hot) * (canvas.width / 1600);
+    if (sep > 1.2) {
+      var tn = B.tint.getContext('2d');
       tn.globalCompositeOperation = 'source-over';
-      tn.clearRect(0, 0, CW, CH);
+      tn.clearRect(0, 0, B.tint.width, B.tint.height);
       tn.drawImage(B.full, 0, 0);
       tn.globalCompositeOperation = 'multiply';
-      tn.fillStyle = 'rgb(' + tints[i][0] + ',' + tints[i][1] + ',' + tints[i][2] + ')';
-      tn.fillRect(0, 0, CW, CH);
-      tn.globalCompositeOperation = 'source-over';
-      var kk = (i - 1) * 0.018 * (0.4 + hot);
+      tn.fillStyle = 'rgb(255,40,60)';
+      tn.fillRect(0, 0, B.tint.width, B.tint.height);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.05 + 0.11 * hot;
-      ctx.translate(cx, cy); ctx.rotate(kk); ctx.scale(1 + kk * 0.5, 1 - kk * 0.5); ctx.translate(-cx, -cy);
-      ctx.drawImage(B.tint, sep * dirs[i][0], sep * dirs[i][1] * (CH / CW), CW, CH);
+      ctx.drawImage(B.tint, sep, 0);
+      tn.globalCompositeOperation = 'source-over';
+      tn.clearRect(0, 0, B.tint.width, B.tint.height);
+      tn.drawImage(B.full, 0, 0);
+      tn.globalCompositeOperation = 'multiply';
+      tn.fillStyle = 'rgb(40,120,255)';
+      tn.fillRect(0, 0, B.tint.width, B.tint.height);
+      ctx.drawImage(B.tint, -sep, 0);
       ctx.restore();
     }
     // prefers-reduced-motion 只关掉"切片错位"这种动得厉害的效果；
-    // 泛光与多维重影保留，否则同一帧在开了减少动态的设备上会明显偏暗。
+    // 泛光与色散保留，否则同一帧在开了减少动态的设备上会明显偏暗。
     if (st.reduced) return;
-    // 切片错位（铺满全屏）
+    // 切片错位
     n = Math.round(EM.clamp((hot - 0.72) * 16, 0, 8));
     for (i = 0; i < n; i++) {
       var band = EM.h(i, 31, (t * 12) | 0);
-      var y = Math.floor(band * (CH - 24));
-      var hh = 6 + EM.h(i, 32, (t * 12) | 0) * 40 * (CH / 900);
-      var dx = (EM.h(i, 33, (t * 12) | 0) - 0.5) * 60 * (CW / 1600) * hot;
-      ctx.drawImage(B.full, 0, y, CW, hh, dx, y, CW, hh);
+      var y = Math.floor(band * (canvas.height - 24));
+      var hh = 6 + EM.h(i, 32, (t * 12) | 0) * 40 * (canvas.height / 900);
+      var dx = (EM.h(i, 33, (t * 12) | 0) - 0.5) * 60 * (canvas.width / 1600) * hot;
+      ctx.drawImage(B.full, 0, y, canvas.width, hh, dx, y, canvas.width, hh);
     }
   }
   APP.composite = composite;
@@ -302,7 +300,7 @@
     WL.under(t, w);
     var idx = S.render(t);
     WL.over(t, w, 'CUE ' + (idx + 1) + '/' + WX.CUES.length + '  ' + WX.CUES[idx].scene + '  ·  ' + WORLD.section(t));
-    composite(t, w, idx);
+    composite(t, w);
     return idx;
   };
 

@@ -361,22 +361,23 @@
   });
 
   /* You have left me in：一行终端提示 + 一个越变越宽的填空格，格子里光标闪烁。 */
+  /* You have left me in：歌词行本身变成终端提示，后面跟着越变越宽的填空格，格子里光标闪烁。 */
   S.def('s077', { name: 'You have left me in' }, function (p, cue, t, wr) {
-    var size = 30, sx = LINE + 160, sy = 300;
-    var prompt = 'you have left me in ';
-    M.mono(prompt, sx, sy, size, INK(wr, 0.95));
+    var size = 32, sx = LINE + 120, sy = 200;
+    var prompt = 'You have left me in ';
+    var vis = EM.clamp(p * 2.2, 0, 1);
+    M.mono(prompt, sx, sy, size, INK(wr, 0.95 * vis));
     var wp = D.measure(prompt, size, true);
     var grow = EM.clamp(p / 0.6, 0, 1);
-    var bw = 34 + 326 * grow;
-    var bx = sx + wp + 8;
+    var bw = 30 + 300 * grow;
+    var bx = sx + wp + 6;
     // 填空格子
-    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.08));
-    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.5), 1.6);
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.08 * vis));
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.5 * vis), 1.6);
     // 待输入光标：方块 + 下划线一起闪
-    M.caret(bx + 6, sy, size, WARM(0.95), t, 0.5);
-    if ((t % 1.0) < 0.5) D.seg(bx + 4, sy + size * 0.42, bx + bw - 4, sy + size * 0.42, WARM(0.8), 2);
-    M.mono('awaiting input', bx, sy + 64, 14, A(wr, 0.55));
-    M.lyric(cue.text, LINE + 120, 200, 32, INK(wr, 0.95), p, {});
+    M.caret(bx + 6, sy, size, WARM(0.95 * vis), t, 0.5);
+    if ((t % 1.0) < 0.5) D.seg(bx + 4, sy + size * 0.42, bx + bw - 4, sy + size * 0.42, WARM(0.8 * vis), 2);
+    M.mono('awaiting input', bx, sy + 42, 13, A(wr, 0.55 * vis));
   });
 
   S.def('s078', { name: 'ISOLATION' }, function (p, cue, t, wr) {
@@ -388,25 +389,24 @@
     }
     for (var q = 10; q >= 1; q--) D.circle(x, y, q * 30, EM.withA(EM.PAL.accent2, 0.055));
     D.circle(x, y, 7 + 8 * EM.hit(t, 0.3), [255, 255, 255, 0.9]);
-    // 把上一句的空格填上：ISOLATION 逐字打进去
-    var size = 30, sx = LINE + 160, sy = 300;
-    var prompt = 'you have left me in ';
+    // 歌词行：把 ISOLATION 直接填进上一句的格子
+    var size = 32, sx = LINE + 120, sy = 200;
+    var prompt = 'You have left me in ';
+    var vis = EM.clamp(p * 2.2, 0, 1);
+    M.mono(prompt, sx, sy, size, INK(wr, 0.95 * vis));
     var wp = D.measure(prompt, size, true);
-    var bx = sx + wp + 8, bw = 360;
-    D.rect(sx - 12, sy - size * 1.0, bw + 24 + wp, size * 1.5, [4, 6, 12, 0.6]);
-    M.mono(prompt, sx, sy, size, INK(wr, 0.9));
-    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.10));
-    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.6), 1.6);
+    var bx = sx + wp + 6, bw = 330;
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.10 * vis));
+    D.rect(bx, sy - size * 0.95, bw, size * 1.28, A(wr, 0.6 * vis), 1.6);
     var full = 'ISOLATION';
     var typed = full.slice(0, Math.max(1, Math.round(full.length * EM.clamp(p / 0.45, 0, 1))));
     M.mono(typed, bx + 10, sy, size, INK(wr, 1));
     if (typed.length < full.length) {
       M.caret(bx + 12 + D.measure(typed, size, true), sy, size, WARM(0.95), t, 0.5);
     } else {
-      M.mono('✓ accepted', bx + bw + 16, sy, 15, A(wr, 0.7));
+      M.mono('✓ accepted', bx + bw + 14, sy, 14, A(wr, 0.7));
     }
     M.head('ISOLATION', x, 780, 54, INK(wr, 1), { align: 'center', weight: 'bold', track: 6 });
-    M.lyric(cue.text === 'ISOLATION' ? '' : cue.text, LINE + 120, 160, 26, INK(wr, 0.8), p, {});
   });
 
   S.def('s079', { name: 'If I can  (3)' }, function (p, cue, t, wr) {

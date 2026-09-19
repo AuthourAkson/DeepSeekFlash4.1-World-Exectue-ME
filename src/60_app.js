@@ -229,10 +229,13 @@
 
   /** 降采样泛光 + 色度分离 + 切片错位。只在世界"过载"时出现。 */
   function composite(t, w) {
-    if (st.reduced) return;
     var hot = w.hot;
     if (hot < 0.30) return;
     var i, n;
+    // 合成器全程在**设备像素空间**工作：先清掉画布上的舞台缩放矩阵。
+    // 之前少了这一步，drawImage(..., canvas.width, canvas.height) 会被舞台矩阵
+    // 再缩放一次（桌面覆盖 83%、手机 61%），导致双端画面不一致。
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     // 泛光：直接从主画布降采样两次（不做整屏拷贝，软件渲染下这一条很关键）
     var bs = B.small.getContext('2d'), ts = B.tiny.getContext('2d');
     bs.clearRect(0, 0, B.small.width, B.small.height);
@@ -272,6 +275,9 @@
       ctx.drawImage(B.tint, -sep, 0);
       ctx.restore();
     }
+    // prefers-reduced-motion 只关掉"切片错位"这种动得厉害的效果；
+    // 泛光与色散保留，否则同一帧在开了减少动态的设备上会明显偏暗。
+    if (st.reduced) return;
     // 切片错位
     n = Math.round(EM.clamp((hot - 0.72) * 16, 0, 8));
     for (i = 0; i < n; i++) {

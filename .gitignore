@@ -15,3 +15,7 @@ desktop.ini
 .DS_Store
 
 video/
+
+# local scraping / headless test leftovers
+_tmp*/
+_tools/last-dom.html

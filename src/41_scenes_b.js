@@ -489,10 +489,10 @@
     var mw = 333 * (1 - 0.12 * k), mh = 500 * (1 - 0.12 * k);
     var mx = 760 + 230 * k, my = 260 - 8 * k;             // 男人：向右走远，略微升高
     WX.PHOTOS.load('girl', 'gpt-advice/transparent_svg_assets/girl.png');
-    WX.PHOTOS.load('man', 'gpt-advice/transparent_svg_assets/man.png');
+    WX.PHOTOS.load('manwalk', 'gpt-advice/transparent_svg_assets/man-walk.png');
     // 两张都已是去水印的透明 PNG，不再需要遮罩
     WX.PHOTOS.draw('girl', 'gpt-advice/transparent_svg_assets/girl.png', gx, gy, gw, gh, 1);
-    WX.PHOTOS.draw('man', 'gpt-advice/transparent_svg_assets/man.png', mx, my, mw, mh, 1);
+    WX.PHOTOS.draw('manwalk', 'gpt-advice/transparent_svg_assets/man-walk.png', mx, my, mw, mh, 1);
     D.rect(gx, gy, gw, gh, A(wr, 0.4), 1.4);
     D.rect(mx, my, mw, mh, A(wr, 0.4), 1.4);
     D.mono('ai', gx + gw / 2, gy - 12, 14, HEAT(0.7), { align: 'center' });

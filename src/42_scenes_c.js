@@ -338,11 +338,16 @@
   });
 
   S.def('s111', { name: 'If I can have you back' }, function (p, cue, t, wr) {
-    var x = CX + 300, y = 560;
-    M.person(x, y, 26, A(wr, 0.4), 'leaving');
     var k = EM.ease(EM.clamp(p * 1.2, 0, 1));
-    M.person(LINE + 260 + 200 * k, y, 28, WARM(0.85 * (1 - k * 0.5)), 'reach');
-    D.dashed(LINE + 300 + 200 * k, 540, x - 40, 540, WARM(0.3 * (1 - k)), 1.4, 10, 8);
+    var baseY = 610;                                   // 脚底基准线
+    var gh = 190, gw = gh * 843 / 1264;                // 女（左）
+    var mh = 205, mw = mh * 843 / 1264;                // 男（右，稍大）
+    var gx = LINE + 260 + 200 * k, mx = CX + 320 + 30 * k;
+    WX.PHOTOS.load('girlstand', 'gpt-advice/transparent_svg_assets/girl-stand.png');
+    WX.PHOTOS.load('manstand', 'gpt-advice/transparent_svg_assets/man-stand.png');
+    WX.PHOTOS.draw('girlstand', 'gpt-advice/transparent_svg_assets/girl-stand.png', gx - gw / 2, baseY - gh, gw, gh, 1);
+    WX.PHOTOS.draw('manstand', 'gpt-advice/transparent_svg_assets/man-stand.png', mx - mw / 2, baseY - mh, mw, mh, 1);
+    D.dashed(gx + gw / 2, 540, mx - mw / 2 - 20, 540, WARM(0.3 * (1 - k)), 1.4, 10, 8);
     D.mono('return  subject;', LINE + 260, 250, 18, A(wr, 0.6));
     M.lyric(cue.text, LINE + 120, 190, 30, INK(wr, 0.95), p, {});
   });
